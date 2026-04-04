@@ -1,0 +1,125 @@
+# Samsung CE Intelligence System Configuration
+# Version: 2.0
+
+system:
+  name: "Samsung CE Intelligence"
+  timezone: "Asia/Singapore"
+  run_hour: 7
+  run_minute: 30
+
+sources:
+  # Priority 1: RSS Feeds (fastest, most reliable)
+  rss:
+    display:
+      - "https://www.ledinside.cn/rss.xml"
+      - "https://www.oled-info.com/rss.xml"
+      - "https://www.digitimes.com/rss/rptlist.asp"
+    china_tech:
+      - "https://technews.tw/feed/"
+      - "https://www.36kr.com/feed/english"
+    global_tech:
+      - "https://techcrunch.com/feed/"
+      - "https://www.theverge.com/rss/index.xml"
+    materials:
+      - "https://www.semiengineering.com/feed/"
+      - "https://www.materialstoday.com/rss/"
+    sea:
+      - "https://www.bangkokpost.com/rss/"
+      - "https://e.vnexpress.net/rss"
+      - "https://thelec.net/rss"
+    
+  # Priority 2: Web Scraping (with selectors)
+  web_scraping:
+    abnotebook:
+      url: "https://www.abnotebook.com"
+      container: ".entry-title"
+      title_selector: "h2.entry-title a"
+      link_selector: "h2.entry-title a"
+      date_selector: ".entry-date"
+      limit: 10
+    cnpowder:
+      url: "https://www.cnpowder.com.cn/news/subject.php"
+      container: "div.news-item"
+      title_selector: "div.news-item a"
+      link_selector: "div.news-item a"
+      date_selector: "div.news-item span.date"
+      limit: 10
+    abvr360:
+      url: "https://www.abvr360.com/a/category/technology"
+      container: ".post-item"
+      title_selector: ".post-title a"
+      link_selector: ".post-title a"
+      date_selector: ".post-date"
+      limit: 8
+
+  # Priority 3: API Sources
+  api:
+    trendforce:
+      url: "https://www.trendforce.com/api/news"
+      method: "GET"
+      params:
+        limit: 20
+    counterpoint:
+      url: "https://www.counterpointresearch.com/wp-json/wp/v2/posts"
+      params:
+        per_page: 15
+
+# Deduplication Configuration
+deduplication:
+  layers:
+    url_hash:
+      enabled: true
+      ignore_params: ["utm_source", "utm_medium", "utm_campaign", "ref", "source"]
+    title_similarity:
+      enabled: true
+      threshold: 0.9
+      method: "rapidfuzz"  # or difflib
+    content_semantic:
+      enabled: true
+      threshold: 0.85
+      model: "sentence-transformers/all-MiniLM-L6-v2"  # Lightweight
+      cache_size: 1000
+  
+  priority_rules:
+    - prefer_longer_content: true
+    - prefer_earlier_publish_date: true
+    - prefer_higher_reliability: true
+  
+  history_days: 7  # Check against last 7 days of history
+
+# Email Configuration
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 465
+  use_ssl: true
+  subject_prefix: "[Samsung CE Intel]"
+  html_template: "templates/report.html"
+
+# Classification Topics (5 required topics)
+topics:
+  1:
+    name: "Competitor Technology & Products"
+    keywords:
+      companies: ["TCL", "Hisense", "LG", "Sony", "Xiaomi", "Apple"]
+      products: ["TV", "OLED", "QLED", "refrigerator", "washing machine", "smartphone"]
+  2:
+    name: "New Technologies / Components / Materials"
+    keywords:
+      tech: ["MicroLED", "Mini LED", "OLED", "quantum dot", "GaN", "SiC", "perovskite"]
+      materials: ["graphene", "carbon fiber", "composite", "polymer"]
+  3:
+    name: "Manufacturing Expansion (SEA/India)"
+    locations: ["Vietnam", "Thailand", "Indonesia", "India", "Malaysia", "Singapore"]
+    actions: ["expansion", "new factory", "investment", "capacity"]
+  4:
+    name: "Exhibitions"
+    events: ["CES", "IFA", "MWC", "Computex", "Display Week", "SID"]
+  5:
+    name: "Supply Chain Risk"
+    keywords: ["shortage", "delay", "tariff", "disruption", "recall", "quality"]
+
+# Reliability Scoring
+reliability:
+  high: [".reuters.com", ".bloomberg.com", "semiengineering.com", "digitimes.com"]
+  medium: ["techcrunch.com", "theverge.com", "oled-info.com"]
+  low: ["abnotebook.com", "leikeji.com", "cnpowder.com.cn"]
