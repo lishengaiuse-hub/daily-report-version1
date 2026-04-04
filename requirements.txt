@@ -1,44 +1,28 @@
-# =====================================================
-# Samsung CE Intelligence System - Dependencies
-# Python 3.11+
-# =====================================================
-
-# HTTP Requests & Web Scraping
+# Core HTTP & Web
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
-# RSS Feed Parsing
+# RSS Parsing
 feedparser==6.0.10
 
-# Multi-Layer Deduplication
+# Deduplication (URL + Title only)
 rapidfuzz==3.5.2
-sentence-transformers==2.2.2
-numpy==1.24.3
 
-# YAML Configuration
+# Configuration
 pyyaml==6.0.1
 
-# Email (SMTP)
+# Email
 secure-smtplib==0.1.1
 
-# Date/Time Utilities
+# Date parsing
 python-dateutil==2.8.2
 
-# LLM API (DeepSeek)
+# LLM
 openai==0.28.1
 
 # Testing
 pytest==7.4.0
 pytest-cov==4.1.0
 
-# =====================================================
-# Python Built-in Modules (DO NOT ADD to requirements):
-# - sqlite3
-# - hashlib
-# - json
-# - re
-# - datetime
-# - email
-# - smtplib
-# =====================================================
+# Note: numpy and sentence-transformers removed for stability
