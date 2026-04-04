@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  samsung-intelligence:
+    build: .
+    container_name: samsung-ce-intel
+    restart: unless-stopped
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - SENDER_PASSWORD=${SENDER_PASSWORD}
+      - RECEIVER_EMAIL=${RECEIVER_EMAIL}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - TZ=Asia/Singapore
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./logs:/app/logs
+    networks:
+      - intel-network
+    # For scheduled runs, use cron inside container or external scheduler
+    command: ["python", "src/main.py"]
+
+networks:
+  intel-network:
+    driver: bridge
