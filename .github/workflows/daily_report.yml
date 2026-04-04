@@ -1,70 +1,271 @@
+# =====================================================
+# Samsung CE Intelligence Report - GitHub Actions Workflow
+# Version: 3.0
+# Updated: 2026-04-04
+# Includes: Firecrawl support, caching, and comprehensive error handling
+# =====================================================
+
 name: Samsung CE Intelligence Report
 
 on:
+  # 定时运行 - 每天新加坡时间 09:30 (UTC+8)
   schedule:
-    # Runs at 01:30 UTC (09:30 Singapore Time)
-    - cron: '30 1 * * *'
-  workflow_dispatch:  # Manual trigger
+    - cron: '30 1 * * *'  # 01:30 UTC = 09:30 Singapore Time
+  
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (no email)'
+        type: boolean
+        default: false
+        required: false
+  
+  # 允许在推送到 main 分支时触发（用于测试）
   push:
     branches: [main]
     paths:
       - 'src/**'
       - 'config/**'
+      - 'requirements.txt'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'config/**'
+
+# 设置权限
+permissions:
+  contents: read
+  actions: write
+  checks: write
+  statuses: write
+
+# 取消正在进行的并发运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   generate-report:
+    name: Generate and Send Intelligence Report
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 15  # 设置超时时间
+    
+    # 环境变量
+    env:
+      TZ: Asia/Singapore
+      PYTHONUNBUFFERED: 1
     
     steps:
+      # ============================================
+      # Step 1: 检出代码
+      # ============================================
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # 只获取最新版本，加快速度
       
+      # ============================================
+      # Step 2: 设置 Python 环境
+      # ============================================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+          cache: 'pip'  # 启用 pip 缓存
       
-      - name: Cache sentence-transformers model
-        uses: actions/cache@v3
+      # ============================================
+      # Step 3: 缓存 HuggingFace 模型（如果使用语义去重）
+      # ============================================
+      - name: Cache HuggingFace models
+        uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: ${{ runner.os }}-huggingface
+          key: ${{ runner.os }}-huggingface-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-huggingface-
       
+      # ============================================
+      # Step 4: 安装 Python 依赖
+      # ============================================
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Create data directory
-        run: mkdir -p data output
+      # ============================================
+      # Step 5: 创建必要的目录
+      # ============================================
+      - name: Create directories
+        run: |
+          mkdir -p data output logs
+          touch data/.gitkeep output/.gitkeep
+          echo "✅ Directories created"
       
-      - name: Run Intelligence System
+      # ============================================
+      # Step 6: 显示配置信息（调试用，不暴露敏感信息）
+      # ============================================
+      - name: Debug configuration
+        run: |
+          echo "=========================================="
+          echo "Configuration Summary:"
+          echo "=========================================="
+          echo "Python version: $(python --version)"
+          echo "Current time: $(date)"
+          echo "Time zone: $(cat /etc/timezone)"
+          echo ""
+          echo "Secrets status:"
+          echo "  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY != '' && '✅ Set' || '❌ Missing' }}"
+          echo "  SENDER_EMAIL: ${{ secrets.SENDER_EMAIL != '' && '✅ Set' || '❌ Missing' }}"
+          echo "  SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD != '' && '✅ Set' || '❌ Missing' }}"
+          echo "  RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL != '' && '✅ Set' || '❌ Missing' }}"
+          echo "  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY != '' && '✅ Set' || '❌ Missing' }}"
+          echo "=========================================="
+      
+      # ============================================
+      # Step 7: 运行智能情报系统
+      # ============================================
+      - name: Run Samsung Intelligence System
         env:
+          # API Keys
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          
+          # Email Configuration
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          
+          # System Configuration
+          TZ: Asia/Singapore
+          PYTHONPATH: ${{ github.workspace }}/src
+          
+          # Dry run mode (from workflow_dispatch)
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
-          python src/main.py
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "🏁 Running in DRY RUN mode (no email will be sent)"
+            python src/main.py --dry-run
+          else
+            echo "🏁 Running in NORMAL mode"
+            python src/main.py
+          fi
       
-      - name: Upload reports
-        if: always()
+      # ============================================
+      # Step 8: 上传 HTML 报告（总是上传，即使失败）
+      # ============================================
+      - name: Upload HTML report
+        if: always()  # 即使前面的步骤失败也上传
         uses: actions/upload-artifact@v4
         with:
-          name: samsung-intelligence-reports
+          name: samsung-intelligence-html-report
           path: |
             output/*.html
-            output/*.md
           retention-days: 30
+          compression-level: 6
       
-      - name: Upload deduplication log
+      # ============================================
+      # Step 9: 上传 Markdown 报告
+      # ============================================
+      - name: Upload Markdown report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dedup-log
-          path: data/history.db
+          name: samsung-intelligence-markdown-report
+          path: |
+            output/*.md
+          retention-days: 30
+          compression-level: 6
+      
+      # ============================================
+      # Step 10: 上传去重数据库（用于调试）
+      # ============================================
+      - name: Upload deduplication database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deduplication-database
+          path: |
+            data/*.db
+            data/*.db-journal
           retention-days: 7
+          compression-level: 6
+      
+      # ============================================
+      # Step 11: 上传日志文件
+      # ============================================
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-logs
+          path: |
+            logs/*.log
+          retention-days: 7
+      
+      # ============================================
+      # Step 12: 清理旧文件（保持磁盘空间）
+      # ============================================
+      - name: Cleanup old artifacts
+        if: always()
+        run: |
+          # 删除 7 天前的数据库备份（如果有）
+          find data -name "*.db-journal" -mtime +7 -delete 2>/dev/null || true
+          find logs -name "*.log" -mtime +30 -delete 2>/dev/null || true
+          echo "✅ Cleanup completed"
+      
+      # ============================================
+      # Step 13: 发送通知到 Slack（可选）
+      # ============================================
+      # - name: Send Slack notification
+      #   if: always()
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     payload: |
+      #       {
+      #         "text": "Samsung CE Intelligence Report: ${{ job.status }}\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #       }
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      
+      # ============================================
+      # Step 14: 发送通知到钉钉/飞书（可选）
+      # ============================================
+      # - name: Send DingTalk notification
+      #   if: failure()
+      #   run: |
+      #     curl -X POST ${{ secrets.DINGTALK_WEBHOOK }} \
+      #       -H 'Content-Type: application/json' \
+      #       -d '{
+      #         "msgtype": "text",
+      #         "text": {
+      #           "content": "❌ Samsung CE Intelligence Report failed!\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #         }
+      #       }'
+
+# =====================================================
+# 可选：添加每周总结报告
+# =====================================================
+# weekly-summary:
+#   name: Weekly Summary Report
+#   runs-on: ubuntu-latest
+#   needs: generate-report
+#   if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * 0'
+#   steps:
+#     - name: Checkout
+#       uses: actions/checkout@v4
+#     
+#     - name: Generate weekly summary
+#       run: |
+#         python scripts/weekly_summary.py
+#     
+#     - name: Send weekly email
+#       env:
+#         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+#         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+#         RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+#       run: |
+#         python scripts/send_weekly_report.py
