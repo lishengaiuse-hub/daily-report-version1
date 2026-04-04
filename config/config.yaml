@@ -1,125 +1,858 @@
-# Samsung CE Intelligence System Configuration
-# Version: 2.0
+# =====================================================
+# Samsung CE Intelligence System - Complete Configuration
+# Version: 3.0
+# Updated: 2026-04-04
+# Includes: RSS, Web Scraping, Firecrawl, API sources
+# =====================================================
 
 system:
   name: "Samsung CE Intelligence"
   timezone: "Asia/Singapore"
   run_hour: 7
   run_minute: 30
+  max_articles_per_source: 30
+  days_to_look_back: 3
+
+# =====================================================
+# DATA SOURCES
+# =====================================================
 
 sources:
-  # Priority 1: RSS Feeds (fastest, most reliable)
+  # ========== RSS FEEDS (Priority 1) ==========
   rss:
+    # 显示技术 / Display Technology
     display:
-      - "https://www.ledinside.cn/rss.xml"
       - "https://www.oled-info.com/rss.xml"
-      - "https://www.digitimes.com/rss/rptlist.asp"
-    china_tech:
-      - "https://technews.tw/feed/"
-      - "https://www.36kr.com/feed/english"
-    global_tech:
-      - "https://techcrunch.com/feed/"
-      - "https://www.theverge.com/rss/index.xml"
-    materials:
-      - "https://www.semiengineering.com/feed/"
-      - "https://www.materialstoday.com/rss/"
-    sea:
-      - "https://www.bangkokpost.com/rss/"
-      - "https://e.vnexpress.net/rss"
-      - "https://thelec.net/rss"
+      - "https://www.microled-info.com/rss.xml"
+      - "https://www.displaydaily.com/rss"
+      - "https://www.ledinside.cn/rss.xml"
+      - "https://www.displaysupplychain.com/feed"
     
-  # Priority 2: Web Scraping (with selectors)
+    # 半导体 / Semiconductor
+    semiconductor:
+      - "https://semiengineering.com/feed/"
+      - "https://www.semiwiki.com/feed/"
+      - "https://www.eetimes.com/feed/"
+      - "https://www.electronicsweekly.com/feed/"
+      - "https://www.semiconductor-digest.com/feed/"
+      - "https://www.semiconductor-today.com/rss/"
+      - "https://www.evertiq.com/rss"
+    
+    # 消费电子 / Consumer Electronics
+    consumer_electronics:
+      - "https://www.theverge.com/rss/index.xml"
+      - "https://techcrunch.com/feed/"
+      - "https://www.engadget.com/rss.xml"
+      - "https://www.cnet.com/rss/news/"
+      - "https://www.gsmarena.com/rss-news-reviews.php"
+      - "https://www.phonearena.com/feed"
+      - "https://9to5google.com/feed/"
+      - "https://9to5mac.com/feed/"
+      - "https://www.androidpolice.com/feed/"
+    
+    # 中文科技媒体 / Chinese Tech Media
+    chinese_tech:
+      - "https://www.ithome.com/rss/"
+      - "https://www.36kr.com/feed"
+      - "https://www.leiphone.com/feed"
+      - "https://www.pingwest.com/feed"
+      - "https://www.cnbeta.com/backend.php"
+      - "https://technews.tw/feed/"
+      - "https://www.eechina.com/rss.xml"
+      - "https://www.eet-china.com/feed"
+      - "https://www.esmchina.com/rss"
+      - "https://www.eepw.com.cn/rss"
+    
+    # 东南亚制造 / SEA Manufacturing
+    sea_manufacturing:
+      - "https://www.vietnam-briefing.com/news/feed/"
+      - "https://thailand-briefing.com/news/feed/"
+      - "https://www.thestar.com.my/rss/business"
+      - "https://www.businesstimes.com.sg/rss"
+      - "https://www.bangkokpost.com/rss/business"
+      - "https://e.vnexpress.net/rss/business"
+      - "https://www.thelec.net/rss"
+      - "https://www.msia.org.my/news_updates/feed/"
+    
+    # 印度制造 / India Manufacturing
+    india_manufacturing:
+      - "https://economictimes.indiatimes.com/rssfeeds/13352311.cms"
+      - "https://www.business-standard.com/rss/manufacturing.rss"
+      - "https://www.livemint.com/rss/manufacturing"
+      - "https://www.electronicsb2b.com/feed/"
+    
+    # 供应链 / Supply Chain
+    supply_chain:
+      - "https://www.supplychainbrain.com/rss"
+      - "https://www.scmr.com/rss"
+      - "https://www.ebnonline.com/feed/"
+      - "https://www.globalsmt.net/rss"
+      - "https://www.electronicdesign.com/feed"
+    
+    # 新材料 / Materials & Battery
+    materials_battery:
+      - "https://www.materialstoday.com/rss-feed"
+      - "https://www.chemistryworld.com/rss"
+      - "https://www.electrochem.org/news/feed"
+      - "https://www.azom.com/rss.aspx"
+      - "https://www.compositesworld.com/rss"
+      - "https://www.advancedsciencenews.com/feed/"
+    
+    # 机器人/智能家居 / Robotics & Smart Home
+    robotics_smart_home:
+      - "https://www.vacuumwars.com/feed/"
+      - "https://roboticsbiz.com/feed/"
+      - "https://www.therobotreport.com/feed/"
+    
+    # AR/VR/可穿戴 / AR/VR/Wearable
+    ar_vr_wearable:
+      - "https://www.microled-info.com/tag/ar/feed"
+      - "https://www.roadtovr.com/feed/"
+      - "https://www.uploadvr.com/feed/"
+    
+    # 展会信息 / Exhibitions
+    exhibitions:
+      - "https://www.ces.tech/rss.aspx"
+      - "https://www.ifa-berlin.com/en/rss"
+      - "https://www.mwcbarcelona.com/rss"
+      - "https://www.displayweek.org/rss"
+    
+    # 市场研究 / Market Research
+    market_research:
+      - "https://www.trendforce.com/rss/"
+      - "https://www.counterpointresearch.com/feed/"
+      - "https://www.idc.com/rss"
+      - "https://www.gartner.com/rss"
+      - "https://www.omdia.com/rss"
+    
+    # 三星官方 / Samsung Official
+    samsung_official:
+      - "https://news.samsung.com/global/rss"
+      - "https://developer.samsung.com/rss"
+    
+    # 元器件供应商 / Component Suppliers
+    component_suppliers:
+      - "https://www.murata.com/en-us/newsroom/feed"
+      - "https://www.tdk.com/en/news_center/feed"
+      - "https://news.kyocera.com/rss"
+      - "https://www.rohm.com/news"
+    
+    # 日本产业新闻 / Japan Industry
+    japan_industry:
+      - "https://www.japanindustrynews.com/feed/"
+      - "https://asia.nikkei.com/rss"
+  
+  # ========== WEB SCRAPING (Priority 2) ==========
   web_scraping:
+    # 艾邦笔电论坛
     abnotebook:
       url: "https://www.abnotebook.com"
-      container: ".entry-title"
-      title_selector: "h2.entry-title a"
-      link_selector: "h2.entry-title a"
+      container: ".entry"
+      title_selector: ".entry-title a"
+      link_selector: ".entry-title a"
+      date_selector: ".entry-date"
+      limit: 15
+    
+    # 艾邦笔电 - 越南板块
+    abnotebook_vietnam:
+      url: "https://www.abnotebook.com/a/category/vietnam"
+      container: ".entry"
+      title_selector: ".entry-title a"
+      link_selector: ".entry-title a"
       date_selector: ".entry-date"
       limit: 10
+    
+    # 艾邦笔电 - 市场数据
+    abnotebook_market:
+      url: "https://www.abnotebook.com/a/category/market-data"
+      container: ".entry"
+      title_selector: ".entry-title a"
+      link_selector: ".entry-title a"
+      date_selector: ".entry-date"
+      limit: 10
+    
+    # 中国粉体网
     cnpowder:
       url: "https://www.cnpowder.com.cn/news/subject.php"
       container: "div.news-item"
       title_selector: "div.news-item a"
       link_selector: "div.news-item a"
       date_selector: "div.news-item span.date"
-      limit: 10
+      limit: 20
+    
+    # 艾邦VR/AR
     abvr360:
       url: "https://www.abvr360.com/a/category/technology"
       container: ".post-item"
       title_selector: ".post-title a"
       link_selector: ".post-title a"
       date_selector: ".post-date"
-      limit: 8
-
-  # Priority 3: API Sources
+      limit: 15
+    
+    # 艾邦机器人
+    aibangbots:
+      url: "https://www.aibangbots.com/a/category/material"
+      container: ".entry"
+      title_selector: ".entry-title a"
+      link_selector: ".entry-title a"
+      date_selector: ".entry-date"
+      limit: 10
+    
+    # 雷科技 (备用 - 主抓取使用 Firecrawl)
+    leikeji:
+      url: "https://www.leikeji.com/columns/articles/%E8%B5%84%E8%AE%AF"
+      container: "article"
+      title_selector: "h3 a"
+      link_selector: "h3 a"
+      date_selector: ".time"
+      limit: 15
+    
+    # IT桔子
+    itjuzi:
+      url: "https://www.itjuzi.com/news"
+      container: ".news-item"
+      title_selector: ".title a"
+      link_selector: ".title a"
+      date_selector: ".time"
+      limit: 10
+    
+    # 老杳吧
+    laoyaoba:
+      url: "https://www.laoyaoba.com/html/news/"
+      container: ".news_list li"
+      title_selector: "a"
+      link_selector: "a"
+      date_selector: ".time"
+      limit: 10
+  
+  # ========== FIRECRAWL SOURCES (Priority 2.5 - Dynamic JavaScript sites) ==========
+  firecrawl:
+    # 雷科技 - 主要抓取方式
+    leikeji:
+      url: "https://www.leikeji.com/columns/articles/%E9%9B%B7%E7%A7%91%E6%8A%80"
+      wait_for: 3000
+      limit: 20
+    
+    # CMPE 展会网
+    cmpe360:
+      url: "https://www.cmpe360.com"
+      wait_for: 3000
+      limit: 15
+    
+    # 艾邦笔电 (动态内容)
+    abnotebook:
+      url: "https://www.abnotebook.com"
+      wait_for: 3000
+      limit: 20
+    
+    # 艾邦VR/AR (动态内容)
+    abvr360:
+      url: "https://www.abvr360.com"
+      wait_for: 3000
+      limit: 15
+    
+    # 艾邦机器人 (动态内容)
+    aibangbots:
+      url: "https://www.aibangbots.com"
+      wait_for: 3000
+      limit: 15
+    
+    # 新浪手机
+    sina_mobile:
+      url: "https://mobile.sina.com.cn"
+      wait_for: 3000
+      limit: 20
+    
+    # 新浪科技-苹果
+    sina_apple:
+      url: "https://tech.sina.com.cn/apple/"
+      wait_for: 3000
+      limit: 20
+    
+    # 新浪科技-家电
+    sina_elec:
+      url: "https://tech.sina.com.cn/elec/"
+      wait_for: 3000
+      limit: 20
+    
+    # 新浪科技-笔记本
+    sina_notebook:
+      url: "https://tech.sina.com.cn/notebook/"
+      wait_for: 3000
+      limit: 20
+    
+    # 爱范儿
+    ifanr:
+      url: "https://www.ifanr.com"
+      wait_for: 3000
+      limit: 20
+    
+    # 安卓网
+    anzhuo:
+      url: "https://www.anzhuo.cn"
+      wait_for: 3000
+      limit: 20
+    
+    # IT之家
+    ithome:
+      url: "https://www.ithome.com"
+      wait_for: 3000
+      limit: 25
+    
+    # IT之家-移动版
+    ithome_mobile:
+      url: "https://mobile.ithome.com/"
+      wait_for: 3000
+      limit: 20
+    
+    # IT之家-PC版
+    ithome_pc:
+      url: "https://www.ithome.com/pc/"
+      wait_for: 3000
+      limit: 15
+    
+    # IT之家-评测
+    ithome_labs:
+      url: "https://www.ithome.com/labs/"
+      wait_for: 3000
+      limit: 15
+    
+    # IT之家-苹果
+    ithome_apple:
+      url: "https://www.ithome.com/apple/"
+      wait_for: 3000
+      limit: 15
+    
+    # IT之家-数码-家电
+    ithome_digi_elec:
+      url: "https://digi.ithome.com/elec"
+      wait_for: 3000
+      limit: 15
+    
+    # IT之家-数码-极客
+    ithome_digi_geek:
+      url: "https://digi.ithome.com/geek"
+      wait_for: 3000
+      limit: 10
+    
+    # IT之家-数码-手机
+    ithome_digi_phone:
+      url: "https://digi.ithome.com/phone"
+      wait_for: 3000
+      limit: 15
+    
+    # IT之家-数码-智能手表
+    ithome_digi_watch:
+      url: "https://digi.ithome.com/smartwatch"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者1
+    tencent_news_1:
+      url: "https://news.qq.com/omn/author/8QMc2HhU6oQeuTne"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者2
+    tencent_news_2:
+      url: "https://news.qq.com/omn/author/8QMY3Hxd7YMbvTY%3D"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者3
+    tencent_news_3:
+      url: "https://news.qq.com/omn/author/8QMc3H1e5IMcuQ%3D%3D"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者4
+    tencent_news_4:
+      url: "https://news.qq.com/omn/author/8QMf3HhY5IwVujjY"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者5
+    tencent_news_5:
+      url: "https://news.qq.com/omn/author/8QMc2XZe7IMauTg%3D"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者6
+    tencent_news_6:
+      url: "https://news.qq.com/omn/author/8QMf23hc6YYdsTne"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者7
+    tencent_news_7:
+      url: "https://news.qq.com/omn/author/8QMW231U6ocVsDo%3D"
+      wait_for: 3000
+      limit: 10
+    
+    # 腾讯新闻作者8
+    tencent_news_8:
+      url: "https://news.qq.com/omn/author/8QMf13ld5I0VujvR"
+      wait_for: 3000
+      limit: 10
+  
+  # ========== API SOURCES (Priority 3) ==========
   api:
     trendforce:
       url: "https://www.trendforce.com/api/news"
       method: "GET"
       params:
         limit: 20
+      headers:
+        User-Agent: "Mozilla/5.0"
+    
     counterpoint:
       url: "https://www.counterpointresearch.com/wp-json/wp/v2/posts"
       params:
         per_page: 15
+        _embed: true
+    
+    display_daily:
+      url: "https://www.displaydaily.com/api/news"
+      method: "GET"
+      params:
+        limit: 10
 
-# Deduplication Configuration
+# =====================================================
+# TOPIC CLASSIFICATION
+# =====================================================
+
+topics:
+  1:
+    name: "Competitor Technology & Products"
+    description: "竞争对手产品发布、技术动态"
+    keywords:
+      companies:
+        - "TCL|Tcl|tcl"
+        - "Hisense"
+        - "Haier|海尔"
+        - "Midea|美的"
+        - "Xiaomi|小米"
+        - "Dreame|追觅"
+        - "Roborock|石头"
+        - "Philips|飞利浦"
+        - "Siemens|西门子"
+        - "Panasonic|松下"
+        - "Apple|苹果"
+        - "Vivo|vivo"
+        - "Oppo|OPPO"
+        - "Honor|荣耀"
+        - "Huawei|华为"
+        - "Transsion|传音"
+        - "Tecno"
+        - "Lenovo|联想"
+        - "Sony|索尼"
+        - "Sharp|夏普"
+        - "LG"
+        - "GREE|格力"
+        - "Skyworth|创维"
+        - "Konka|康佳"
+        - "Changhong|长虹"
+      products:
+        - "TV|电视|电视机"
+        - "television"
+        - "OLED|OLED电视"
+        - "MicroLED|Micro LED"
+        - "QLED|QLED电视"
+        - "Mini LED|Mini-LED"
+        - "display|显示屏|屏幕"
+        - "refrigerator|冰箱"
+        - "fridge"
+        - "washing machine|洗衣机"
+        - "washer"
+        - "air conditioner|空调"
+        - "AC"
+        - "air purifier|空气净化器"
+        - "vacuum|吸尘器"
+        - "robot vacuum|扫地机器人|扫拖机器人"
+        - "smartphone|智能手机|手机"
+        - "phone"
+        - "foldable|折叠屏|折叠手机"
+        - "smartwatch|智能手表"
+        - "wearable|可穿戴设备"
+        - "tablet|平板|平板电脑"
+        - "laptop|笔记本|笔记本电脑"
+        - "monitor|显示器"
+        - "soundbar|回音壁"
+        - "speaker|音箱"
+    priority: 1
+
+  2:
+    name: "New Technologies / Components / Materials"
+    description: "新技术、元器件、新材料"
+    keywords:
+      technologies:
+        - "MicroLED|Micro LED|微型LED"
+        - "Mini LED|Mini-LED"
+        - "OLED|有机发光二极管"
+        - "AMOLED"
+        - "QD-OLED"
+        - "WOLED"
+        - "FOLED"
+        - "transparent display|透明显示"
+        - "flexible display|柔性显示"
+        - "foldable display|折叠显示"
+        - "rollable display|卷曲显示"
+        - "quantum dot|量子点"
+        - "gallium nitride|氮化镓|GaN"
+        - "silicon carbide|碳化硅|SiC"
+        - "perovskite|钙钛矿"
+        - "graphene|石墨烯"
+        - "carbon nanotube|碳纳米管"
+        - "solid state battery|固态电池"
+        - "silicon anode|硅负极"
+        - "lithium metal|锂金属"
+        - "sodium ion|钠离子"
+        - "fast charging|快充"
+        - "wireless charging|无线充电"
+        - "LIDAR|激光雷达"
+        - "ToF|飞行时间"
+        - "3D sensing|3D传感"
+        - "under display camera|屏下摄像头"
+        - "vapor chamber|均热板"
+        - "thermal management|热管理"
+        - "AR|VR|增强现实|虚拟现实"
+        - "AR眼镜|VR眼镜|智能眼镜"
+        - "3D printing|3D打印|增材制造"
+        - "additive manufacturing"
+        - "electronic skin|电子皮肤"
+        - "e-skin"
+      suppliers:
+        - "BOE|京东方"
+        - "CSOT|华星光电"
+        - "Tianma|天马"
+        - "Visionox|维信诺"
+        - "Everdisplay|上海和辉"
+        - "Royole|柔宇"
+        - "LG Display|LG显示"
+        - "Samsung Display|三星显示"
+        - "Sharp Display|夏普显示"
+        - "Japan Display|JDI"
+        - "AUO|友达"
+        - "Universal Display|UDC"
+        - "Merck|默克"
+        - "DuPont|杜邦"
+        - "LG Chem|LG化学"
+        - "Samsung SDI|三星SDI"
+        - "Qualcomm|高通"
+        - "MediaTek|联发科|MTK"
+        - "Unisoc|紫光展锐"
+        - "Broadcom|博通"
+        - "Realtek|瑞昱"
+        - "Novatek|联咏"
+        - "Himax|奇景"
+        - "Synaptics|新思"
+        - "Corning|康宁"
+        - "AGC|旭硝子"
+        - "Nippon Electric Glass|日本电气硝子"
+        - "Schott|肖特"
+        - "Foxconn|富士康|鸿海"
+        - "Luxshare|立讯精密"
+        - "Goertek|歌尔股份"
+        - "BYD Electronic|比亚迪电子"
+        - "TSMC|台积电"
+        - "SMIC|中芯国际"
+    priority: 2
+
+  3:
+    name: "Manufacturing Expansion (SEA / India)"
+    description: "东南亚和印度制造扩张"
+    locations:
+      - "Vietnam|越南"
+      - "Thailand|泰国"
+      - "Indonesia|印尼|印度尼西亚"
+      - "Malaysia|马来西亚"
+      - "Singapore|新加坡"
+      - "Philippines|菲律宾"
+      - "Myanmar|缅甸"
+      - "Cambodia|柬埔寨"
+      - "India|印度"
+      - "Bangladesh|孟加拉"
+      - "Bac Ninh|北宁"
+      - "Thai Nguyen|太原"
+      - "Hanoi|河内"
+      - "Ho Chi Minh|胡志明|西贡"
+      - "Haiphong|海防"
+      - "Da Nang|岘港"
+      - "Bangkok|曼谷"
+      - "Rayong|罗勇"
+      - "Chonburi|春武里"
+      - "Jakarta|雅加达"
+      - "Batam|巴淡"
+      - "Karawang|加拉璜"
+      - "Penang|槟城"
+      - "Selangor|雪兰莪"
+      - "Johor|柔佛"
+      - "Kulim|居林"
+      - "Chennai|金奈"
+      - "Noida|诺伊达"
+      - "Gurugram|古尔冈"
+      - "Bangalore|班加罗尔"
+      - "Hyderabad|海德拉巴"
+    keywords:
+      - "factory|工厂|厂房"
+      - "plant|生产基地|制造基地"
+      - "manufacturing|制造|生产"
+      - "production|生产"
+      - "assembly|组装"
+      - "investment|投资"
+      - "expansion|扩产|扩建"
+      - "new facility|新工厂"
+      - "capacity|产能"
+      - "relocation|转移|迁移"
+      - "build|建设|建造"
+      - "construct|兴建"
+      - "establish|设立|成立"
+      - "set up|建立"
+      - "move production|迁移生产"
+      - "扩产|增资|新建"
+      - "奠基|开工|投产"
+      - "试运行|量产"
+      - "出货量|交付量"
+      - "生产规模|产能扩张"
+    priority: 3
+
+  4:
+    name: "Exhibitions"
+    description: "行业展会、会议"
+    events:
+      - "CES|International Consumer Electronics Show"
+      - "IFA|柏林消费电子展"
+      - "MWC|世界移动通信大会"
+      - "Computex|台北电脑展"
+      - "AWE|中国家电博览会"
+      - "Gitex|海湾信息技术展"
+      - "Hong Kong Electronics Fair|香港电子展"
+      - "Canton Fair|广交会"
+      - "Global Sources|环球资源"
+      - "Electronica|慕尼黑电子展"
+      - "Semicon|半导体展"
+      - "Display Week|显示周"
+      - "SID Display Week"
+      - "Touch Taiwan|台湾触控展"
+      - "Finiture"
+      - "exhibition|展会|展览"
+      - "博览会|论坛|会议"
+      - "conference|summit|研讨会"
+      - "精密陶瓷产业链展览会"
+      - "先进陶瓷产业论坛"
+      - "SOFC/SOEC陶瓷产业论坛"
+      - "半导体陶瓷产业论坛"
+      - "LTCC/HTCC产业论坛"
+      - "压电陶瓷产业论坛"
+      - "陶瓷基板暨功率半导体产业论坛"
+      - "陶瓷天线产业论坛"
+      - "MLCC产业论坛"
+    priority: 4
+
+  5:
+    name: "Supply Chain Risk"
+    description: "供应链风险"
+    keywords:
+      risks:
+        - "shortage|缺货|短缺"
+        - "supply disruption|供应中断"
+        - "supply chain|供应链"
+        - "delay|延迟|延误"
+        - "bottleneck|瓶颈"
+        - "recall|召回"
+        - "quality issue|质量问题"
+        - "defect|缺陷"
+        - "fire|火灾"
+        - "flood|洪水"
+        - "earthquake|地震"
+        - "strike|罢工"
+        - "lockdown|封控|封锁"
+        - "tariff|关税"
+        - "trade war|贸易战"
+        - "sanction|制裁"
+        - "export ban|出口禁令"
+        - "import restriction|进口限制"
+        - "geopolitical|地缘政治"
+        - "political risk|政治风险"
+        - "currency fluctuation|汇率波动"
+        - "price increase|涨价|价格上涨"
+        - "supplier issue|供应商问题"
+      products:
+        - "panel|面板"
+        - "display|显示屏"
+        - "screen|屏幕"
+        - "chip|芯片"
+        - "semiconductor|半导体"
+        - "memory|存储"
+        - "DRAM|内存"
+        - "NAND|闪存"
+        - "battery|电池"
+        - "component|元器件"
+        - "module|模组"
+        - "PCB|电路板"
+        - "sensor|传感器"
+        - "camera module|摄像头模组"
+        - "driver IC|驱动芯片"
+        - "power IC|电源芯片"
+        - "MCU|微控制器"
+        - "石英|quartz"
+        - "AMB载板"
+        - "MLCC|多层陶瓷电容"
+        - "金属粉体"
+        - "工业电窑炉"
+        - "压电陶瓷"
+        - "陶瓷天线"
+        - "精细陶瓷部件"
+        - "固体电解质"
+        - "高性能陶瓷涂层"
+        - "热电材料"
+        - "电子陶瓷纳米材料"
+        - "医疗陶瓷材料"
+        - "半导体陶瓷零部件"
+        - "增材丝网印刷"
+        - "陶瓷部件"
+        - "树脂外部电极"
+    priority: 5
+
+# =====================================================
+# EXCLUDE KEYWORDS (跳过不相关的内容)
+# =====================================================
+
+exclude_keywords:
+  - "openai"
+  - "chatgpt"
+  - "asteroid"
+  - "spacecraft"
+  - "nasa"
+  - "spacex"
+  - "crypto"
+  - "bitcoin"
+  - "nft"
+  - "blockchain"
+  - "real estate"
+  - "pharmaceutical"
+  - "drug"
+  - "medicine"
+  - "clinical trial"
+  - "celebrity"
+  - "entertainment"
+  - "movie"
+  - "music"
+  - "sports"
+  - "gaming|游戏"
+  - "cryptocurrency"
+
+# =====================================================
+# DEDUPLICATION CONFIGURATION
+# =====================================================
+
 deduplication:
   layers:
     url_hash:
       enabled: true
-      ignore_params: ["utm_source", "utm_medium", "utm_campaign", "ref", "source"]
-    title_similarity:
+      ignore_params:
+        - "utm_source"
+        - "utm_medium"
+        - "utm_campaign"
+        - "ref"
+        - "source"
+        - "from"
+        - "utm_content"
+        - "utm_term"
+    
+    title:
       enabled: true
-      threshold: 0.9
-      method: "rapidfuzz"  # or difflib
-    content_semantic:
-      enabled: true
+      threshold: 0.85  # 降低阈值，更容易检测重复
+    
+    semantic:
+      enabled: false  # 禁用语义去重以加快速度
       threshold: 0.85
-      model: "sentence-transformers/all-MiniLM-L6-v2"  # Lightweight
-      cache_size: 1000
+      model: "all-MiniLM-L6-v2"
   
-  priority_rules:
-    - prefer_longer_content: true
-    - prefer_earlier_publish_date: true
-    - prefer_higher_reliability: true
+  history_days: 7
   
-  history_days: 7  # Check against last 7 days of history
+  priority:
+    prefer_longer_content: true
+    prefer_earlier_date: true
+    prefer_higher_reliability: true
 
-# Email Configuration
+# =====================================================
+# SOURCE RELIABILITY SCORES
+# =====================================================
+
+reliability:
+  high:
+    - "reuters.com"
+    - "bloomberg.com"
+    - "wsj.com"
+    - "ft.com"
+    - "semiengineering.com"
+    - "digitimes.com"
+    - "trendforce.com"
+    - "counterpointresearch.com"
+    - "ieee.org"
+    - "nature.com"
+    - "sciencedirect.com"
+    - "eetimes.com"
+    - "cmpe360.com"
+  
+  medium:
+    - "techcrunch.com"
+    - "theverge.com"
+    - "engadget.com"
+    - "oled-info.com"
+    - "microled-info.com"
+    - "ledinside.cn"
+    - "technews.tw"
+    - "cnpowder.com.cn"
+    - "ithome.com"
+    - "36kr.com"
+    - "leiphone.com"
+    - "pingwest.com"
+    - "thelec.net"
+    - "vietnam-briefing.com"
+    - "thailand-briefing.com"
+    - "ifanr.com"
+    - "anzhuo.cn"
+    - "sina.com.cn"
+    - "qq.com"
+  
+  low:
+    - "abnotebook.com"
+    - "leikeji.com"
+    - "abvr360.com"
+    - "aibangbots.com"
+    - "polytpe.com"
+    - "weibo.com"
+    - "zhihu.com"
+
+# =====================================================
+# EMAIL CONFIGURATION
+# =====================================================
+
 email:
   smtp_host: "smtp.gmail.com"
   smtp_port: 465
   use_ssl: true
   subject_prefix: "[Samsung CE Intel]"
-  html_template: "templates/report.html"
+  from_name: "Samsung CE Intelligence"
 
-# Classification Topics (5 required topics)
-topics:
-  1:
-    name: "Competitor Technology & Products"
-    keywords:
-      companies: ["TCL", "Hisense", "LG", "Sony", "Xiaomi", "Apple"]
-      products: ["TV", "OLED", "QLED", "refrigerator", "washing machine", "smartphone"]
-  2:
-    name: "New Technologies / Components / Materials"
-    keywords:
-      tech: ["MicroLED", "Mini LED", "OLED", "quantum dot", "GaN", "SiC", "perovskite"]
-      materials: ["graphene", "carbon fiber", "composite", "polymer"]
-  3:
-    name: "Manufacturing Expansion (SEA/India)"
-    locations: ["Vietnam", "Thailand", "Indonesia", "India", "Malaysia", "Singapore"]
-    actions: ["expansion", "new factory", "investment", "capacity"]
-  4:
-    name: "Exhibitions"
-    events: ["CES", "IFA", "MWC", "Computex", "Display Week", "SID"]
-  5:
-    name: "Supply Chain Risk"
-    keywords: ["shortage", "delay", "tariff", "disruption", "recall", "quality"]
+# =====================================================
+# REPORT CONFIGURATION
+# =====================================================
 
-# Reliability Scoring
-reliability:
-  high: [".reuters.com", ".bloomberg.com", "semiengineering.com", "digitimes.com"]
-  medium: ["techcrunch.com", "theverge.com", "oled-info.com"]
-  low: ["abnotebook.com", "leikeji.com", "cnpowder.com.cn"]
+report:
+  max_articles_per_topic: 20
+  include_deduplication_report: true
+  include_confidence_scores: true
+  date_format: "%B %d, %Y"
+  time_format: "%Y-%m-%d %H:%M:%S"
+
+# =====================================================
+# LOGGING CONFIGURATION
+# =====================================================
+
+logging:
+  level: "INFO"
+  format: "[%(asctime)s] %(levelname)s: %(message)s"
+  file: "logs/system.log"
