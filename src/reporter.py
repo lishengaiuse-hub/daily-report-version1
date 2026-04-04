@@ -2,418 +2,594 @@
 # -*- coding: utf-8 -*-
 """
 Report Generator for Samsung CE Intelligence
-Generates HTML and Markdown reports with deduplication statistics
+Generates professional HTML and Markdown reports with AI-powered summaries
+Format reference: https://lishengaiuse-hub.github.io/Weekly-report/samsung_ce_intel_report_20260330
 """
 
+import os
+import re
 from datetime import datetime
 from typing import List, Dict, Any
 from collections import defaultdict
+import openai
 
 class ReportGenerator:
-    """Generate formatted reports"""
+    """Generate formatted reports with AI summaries for each news item"""
     
     def __init__(self, config: Dict):
         self.config = config
         self.topic_names = {
-            1: "Competitor Technology & Products",
-            2: "New Technologies / Components / Materials",
-            3: "Manufacturing Expansion (SEA / India)",
-            4: "Exhibitions",
-            5: "Supply Chain Risk"
+            1: "竞品动态 — Competitor Technology & Product Moves",
+            2: "新兴技术与材料 — Emerging Tech, Materials & CMF Design",
+            3: "东南亚/印度制造 — Manufacturing SEA / India",
+            4: "行业展会 — Industry Events",
+            5: "供应链风险 — Supply Chain Risks",
+            6: "成本与大宗商品 — Cost & Commodity Trends",
+            7: "AI与智能家居 — AI & Software in CE",
+            8: "市场情报与政策 — Market Intelligence & Policy"
         }
+        
+        # Impact level mapping
+        self.impact_levels = {
+            'high': '🔴 HIGH',
+            'medium': '🟡 MED',
+            'low': '🟢 LOW'
+        }
+        
+        # Initialize AI for summarization
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.ai_enabled = bool(self.api_key)
+        if self.ai_enabled:
+            openai.api_key = self.api_key
+            openai.api_base = "https://api.deepseek.com/v1"
+    
+    def _generate_ai_summary(self, title: str, content: str, impact_level: str = "medium") -> str:
+        """
+        Generate AI-powered summary for a single news item
+        
+        Args:
+            title: News title
+            content: News content or summary
+            impact_level: HIGH/MEDIUM/LOW impact level
+        
+        Returns:
+            Concise 1-2 sentence summary
+        """
+        if not self.ai_enabled or not content:
+            # Fallback: use title + first 100 chars of content
+            summary = content[:150] if content else title
+            return summary + "..." if len(summary) >= 150 else summary
+        
+        try:
+            # Map impact level to prompt emphasis
+            emphasis = {
+                'high': '重点突出其对三星的紧迫影响和行动建议。',
+                'medium': '客观总结事件内容，说明对三星的潜在影响。',
+                'low': '简要记录该动态，供参考跟踪。'
+            }.get(impact_level, '客观总结该新闻的主要内容。')
+            
+            response = openai.ChatCompletion.create(
+                model="deepseek-chat",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""你是一个专业的消费电子行业分析师，为三星电子撰写情报简报。
+                        请用简洁专业的中文，为以下新闻生成一段总结（1-2句话，50-80字）。
+                        {emphasis}
+                        总结格式：直接陈述事实和影响，不要使用"总结："、"本条新闻"等开头语。
+                        重点突出：技术/产品名称、公司名称、对三星的具体影响。"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"标题：{title}\n\n内容：{content[:1500]}"
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=120
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            return summary
+            
+        except Exception as e:
+            print(f"⚠️ AI summary failed for '{title[:50]}': {e}")
+            # Fallback: extract first sentence
+            first_sentence = content.split('。')[0] if content else title
+            return first_sentence[:120] + ("..." if len(first_sentence) > 120 else "")
+    
+    def _determine_impact(self, article: Dict, topic_id: int) -> str:
+        """
+        Determine impact level based on content and topic
+        
+        Returns: 'high', 'medium', or 'low'
+        """
+        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
+        
+        # High impact keywords
+        high_keywords = [
+            '发布', '推出', '上市', '价格', '降价', '市场份额', '超越', '首次',
+            '突破', '革命性', '颠覆', '关税', '制裁', '断供', '短缺',
+            '越南', '印度', '工厂', '投资', '扩产', '战略合作'
+        ]
+        
+        # Medium impact keywords  
+        medium_keywords = [
+            '升级', '改进', '优化', '展示', '亮相', '参展', '论坛',
+            '趋势', '预测', '增长', '下降', '调整', '政策'
+        ]
+        
+        # Topic-specific impact boosting
+        topic_high = [1, 3, 5, 6]  # Competitors, Manufacturing, Supply Chain, Cost
+        topic_medium = [2, 4, 7, 8]  # Tech, Exhibitions, AI, Market
+        
+        score = 0
+        for kw in high_keywords:
+            if kw in text:
+                score += 2
+        for kw in medium_keywords:
+            if kw in text:
+                score += 1
+        
+        # Boost by topic
+        if topic_id in topic_high:
+            score += 1
+        elif topic_id in topic_medium:
+            score += 0
+        
+        # Check source reliability
+        reliability = article.get('reliability_score', 0.6)
+        if reliability >= 0.9:
+            score += 1
+        
+        if score >= 3:
+            return 'high'
+        elif score >= 1:
+            return 'medium'
+        else:
+            return 'low'
+    
+    def _format_article_card(self, article: Dict, index: int, topic_id: int) -> str:
+        """
+        Format a single article as an HTML card with impact label and summary
+        """
+        title = article.get('title', '无标题')
+        summary = article.get('summary', article.get('content', ''))
+        link = article.get('link', '#')
+        source = article.get('source', '未知来源')
+        
+        # Generate AI summary if available
+        impact = self._determine_impact(article, topic_id)
+        ai_summary = self._generate_ai_summary(title, summary, impact)
+        
+        impact_display = self.impact_levels.get(impact, '🟡 MED')
+        
+        # Format date if available
+        pub_date = article.get('published_date')
+        date_str = ""
+        if pub_date:
+            if isinstance(pub_date, datetime):
+                date_str = pub_date.strftime('%Y-%m-%d')
+            elif isinstance(pub_date, str):
+                date_str = pub_date[:10]
+        
+        return f"""
+        <div class="article-card impact-{impact}">
+            <div class="article-header">
+                <span class="impact-badge">{impact_display}</span>
+                <span class="article-date">{date_str}</span>
+                <span class="article-source">📎 {source}</span>
+            </div>
+            <div class="article-title">
+                <a href="{link}" target="_blank" rel="noopener noreferrer">{self._escape_html(title)}</a>
+            </div>
+            <div class="article-summary">
+                {self._escape_html(ai_summary)}
+            </div>
+            <div class="article-footer">
+                <a href="{link}" class="source-link" target="_blank">🔗 Read Source Article</a>
+            </div>
+        </div>
+        """
+    
+    def _escape_html(self, text: str) -> str:
+        """Escape HTML special characters"""
+        if not text:
+            return ""
+        return (text.replace('&', '&amp;')
+                    .replace('<', '&lt;')
+                    .replace('>', '&gt;')
+                    .replace('"', '&quot;')
+                    .replace("'", '&#39;'))
     
     def generate_markdown(self, articles: List[Dict], stats: Dict) -> str:
-        """Generate Markdown report"""
+        """Generate Markdown report (simplified version for backup)"""
+        date_str = datetime.now().strftime('%Y-%m-%d')
         
-        date_str = datetime.now().strftime('%B %d, %Y')
+        report = f"""# Samsung CE Intelligence Brief
+**Date:** {date_str}
+**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Executive Summary
+- **Total unique articles:** {len(articles)}
+- **Duplicates removed:** {stats.get('duplicates_removed', 0)}
+
+"""
+        return report
+    
+    def generate_html(self, articles: List[Dict], stats: Dict = None) -> str:
+        """Generate professional HTML report with AI summaries"""
+        
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        date_display = datetime.now().strftime('%B %d, %Y')
         
         # Group articles by topic
         articles_by_topic = defaultdict(list)
         for article in articles:
-            for topic in article.get('topics', []):
-                articles_by_topic[topic].append(article)
+            for topic_id in article.get('topics', []):
+                if topic_id in self.topic_names:
+                    articles_by_topic[topic_id].append(article)
         
-        # Build report
-        report = []
-        report.append(f"# Samsung CE Intelligence Brief")
-        report.append(f"**Date:** {date_str}")
-        report.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        report.append("")
+        # Calculate statistics
+        total_articles = len(articles)
+        topic_stats = {tid: len(articles_by_topic[tid]) for tid in self.topic_names}
         
-        # Executive Summary
-        report.append("## 📊 Executive Summary")
-        report.append("")
-        report.append(f"- **Total unique articles:** {len(articles)}")
-        report.append(f"- **Duplicates removed:** {stats.get('duplicates_removed', 0)}")
+        # Count by impact level
+        impact_counts = {'high': 0, 'medium': 0, 'low': 0}
+        for topic_id, topic_articles in articles_by_topic.items():
+            for article in topic_articles:
+                impact = self._determine_impact(article, topic_id)
+                impact_counts[impact] += 1
         
-        report.append("")
-        report.append("| Topic | Count |")
-        report.append("|-------|-------|")
-        for topic_id in range(1, 6):
-            count = len(articles_by_topic.get(topic_id, []))
-            report.append(f"| {self.topic_names.get(topic_id, f'Topic {topic_id}')} | {count} |")
-        
-        # Deduplication Report
-        report.append("")
-        report.append("## 🔍 Deduplication Report")
-        report.append("")
-        report.append(f"- **Before dedup:** {stats.get('total_before', 0)} articles")
-        report.append(f"- **After dedup:** {stats.get('total_after', 0)} articles")
-        report.append(f"- **Removed:** {stats.get('duplicates_removed', 0)} duplicates")
-        
-        if stats.get('by_layer'):
-            report.append("")
-            report.append("**Detection by layer:**")
-            for layer, count in stats['by_layer'].items():
-                report.append(f"  - {layer}: {count}")
-        
-        # Topic Sections
-        for topic_id in range(1, 6):
-            topic_articles = articles_by_topic.get(topic_id, [])
-            report.append("")
-            report.append(f"## Topic {topic_id} — {self.topic_names.get(topic_id)}")
-            report.append("")
-            
-            if not topic_articles:
-                report.append("*No updates in this category*")
+        # Generate HTML for each topic
+        topic_html = []
+        for topic_id in range(1, 9):
+            if topic_id not in articles_by_topic or not articles_by_topic[topic_id]:
                 continue
             
-            # Generate appropriate table based on topic
-            if topic_id == 1:
-                report.append(self._generate_topic1_table(topic_articles))
-            elif topic_id == 2:
-                report.append(self._generate_topic2_table(topic_articles))
-            elif topic_id == 3:
-                report.append(self._generate_topic3_table(topic_articles))
-            elif topic_id == 4:
-                report.append(self._generate_topic4_table(topic_articles))
-            elif topic_id == 5:
-                report.append(self._generate_topic5_table(topic_articles))
-        
-        # Key Takeaways
-        report.append("")
-        report.append("## 💡 Key Takeaways for Samsung")
-        report.append("")
-        
-        takeaways = []
-        for topic_id, articles in articles_by_topic.items():
-            if len(articles) > 0:
-                takeaways.append(f"- **{self.topic_names.get(topic_id)}:** {len(articles)} relevant updates")
-        
-        if not takeaways:
-            takeaways.append("- Continue monitoring market developments")
-        
-        report.extend(takeaways)
-        
-        # Footer
-        report.append("")
-        report.append("---")
-        report.append(f"*Generated by Samsung CE Intelligence System v2.0*")
-        
-        return "\n".join(report)
-    
-    def _generate_topic1_table(self, articles: List[Dict]) -> str:
-        """Generate table for Topic 1: Competitors"""
-        if not articles:
-            return "*No updates*"
-        
-        rows = ["| Company | Summary | Technology | Source | Confidence |"]
-        rows.append("|---------|---------|------------|--------|------------|")
-        
-        for article in articles[:20]:
-            company = self._extract_company(article)
-            summary = article.get('summary', article.get('title', ''))[:100]
-            tech = self._extract_technology(article)
-            source = article.get('source', 'unknown')
-            confidence = "🟢 High" if article.get('reliability_score', 0) > 0.85 else "🟡 Medium" if article.get('reliability_score', 0) > 0.7 else "🔴 Low"
-            link = article.get('link', '#')
+            topic_articles = articles_by_topic[topic_id]
+            # Sort by impact (high first)
+            topic_articles.sort(key=lambda x: (
+                0 if self._determine_impact(x, topic_id) == 'high' 
+                else 1 if self._determine_impact(x, topic_id) == 'medium' 
+                else 2
+            ))
             
-            rows.append(f"| **{company}** | {summary}... | {tech} | [{source}]({link}) | {confidence} |")
-        
-        return "\n".join(rows)
-    
-    def _generate_topic2_table(self, articles: List[Dict]) -> str:
-        """Generate table for Topic 2: Technologies"""
-        if not articles:
-            return "*No updates*"
-        
-        rows = ["| Technology | Supplier | Summary | Source | Confidence |"]
-        rows.append("|------------|----------|---------|--------|------------|")
-        
-        for article in articles[:20]:
-            tech = self._extract_technology(article) or "New technology"
-            supplier = self._extract_supplier(article) or "Various"
-            summary = article.get('summary', article.get('title', ''))[:80]
-            source = article.get('source', 'unknown')
-            confidence = "🟢 High" if article.get('reliability_score', 0) > 0.85 else "🟡 Medium"
-            link = article.get('link', '#')
+            articles_html = []
+            for idx, article in enumerate(topic_articles[:25]):  # Limit per topic
+                articles_html.append(self._format_article_card(article, idx, topic_id))
             
-            rows.append(f"| {tech} | {supplier} | {summary}... | [{source}]({link}) | {confidence} |")
+            topic_html.append(f"""
+            <div class="topic-section">
+                <h2 class="topic-title">T{topic_id} — {self.topic_names[topic_id]}</h2>
+                <div class="impact-summary">
+                    <span>🔴 HIGH · 🟡 MED · 🟢 LOW · {len(topic_articles)} items</span>
+                </div>
+                <div class="articles-grid">
+                    {''.join(articles_html)}
+                </div>
+            </div>
+            """)
         
-        return "\n".join(rows)
-    
-    def _generate_topic3_table(self, articles: List[Dict]) -> str:
-        """Generate table for Topic 3: Manufacturing Expansion"""
-        if not articles:
-            return "*No updates*"
+        # Generate priority alerts section (top high-impact articles)
+        high_impact_alerts = []
+        for topic_id, topic_articles in articles_by_topic.items():
+            for article in topic_articles[:3]:  # Top 3 per topic
+                if self._determine_impact(article, topic_id) == 'high':
+                    title = article.get('title', '')[:100]
+                    summary = self._generate_ai_summary(
+                        article.get('title', ''), 
+                        article.get('summary', ''),
+                        'high'
+                    )[:150]
+                    high_impact_alerts.append(f"""
+                    <div class="alert-item">
+                        <span class="alert-badge">🔴 HIGH</span>
+                        <span class="alert-text">{self._escape_html(title)} — {self._escape_html(summary)}</span>
+                    </div>
+                    """)
         
-        rows = ["| Company | Location | Investment | Status | Source | Confidence |"]
-        rows.append("|---------|----------|------------|--------|--------|------------|")
+        alerts_html = ''.join(high_impact_alerts[:8]) if high_impact_alerts else '<div class="alert-item">无高优先级警报</div>'
         
-        for article in articles[:15]:
-            company = self._extract_company(article) or "Various"
-            location = self._extract_location(article) or "SEA/India"
-            summary = article.get('summary', article.get('title', ''))[:80]
-            source = article.get('source', 'unknown')
-            confidence = "🟢 High" if article.get('reliability_score', 0) > 0.85 else "🟡 Medium"
-            link = article.get('link', '#')
-            
-            rows.append(f"| {company} | {location} | {summary}... | Expansion | [{source}]({link}) | {confidence} |")
-        
-        return "\n".join(rows)
-    
-    def _generate_topic4_table(self, articles: List[Dict]) -> str:
-        """Generate table for Topic 4: Exhibitions"""
-        if not articles:
-            return "*No exhibitions today*"
-        
-        rows = ["| Exhibition | Location | Date | Source | Confidence |"]
-        rows.append("|------------|----------|------|--------|------------|")
-        
-        for article in articles[:15]:
-            title = article.get('title', 'Industry Exhibition')[:50]
-            location = self._extract_location(article) or "TBD"
-            date = ""
-            if article.get('published_date'):
-                date = article['published_date'].strftime('%Y-%m-%d')
-            source = article.get('source', 'unknown')
-            confidence = "🟢 High" if article.get('reliability_score', 0) > 0.85 else "🟡 Medium"
-            link = article.get('link', '#')
-            
-            rows.append(f"| {title} | {location} | {date} | [{source}]({link}) | {confidence} |")
-        
-        return "\n".join(rows)
-    
-    def _generate_topic5_table(self, articles: List[Dict]) -> str:
-        """Generate table for Topic 5: Supply Chain Risk"""
-        if not articles:
-            return "*No risk updates*"
-        
-        rows = ["| Risk Area | Summary | Impact | Source | Confidence |"]
-        rows.append("|-----------|---------|--------|--------|------------|")
-        
-        for article in articles[:15]:
-            risk = self._extract_risk(article) or "Supply Chain"
-            summary = article.get('summary', article.get('title', ''))[:80]
-            source = article.get('source', 'unknown')
-            confidence = "🔴 High Risk" if article.get('reliability_score', 0) > 0.85 else "🟡 Medium Risk"
-            link = article.get('link', '#')
-            
-            rows.append(f"| {risk} | {summary}... | Monitor | [{source}]({link}) | {confidence} |")
-        
-        return "\n".join(rows)
-    
-    def _extract_company(self, article: Dict) -> str:
-        """Extract company name from article"""
-        title = article.get('title', '').lower()
-        companies = ['tcl', 'hisense', 'lg', 'sony', 'xiaomi', 'apple', 'huawei', 'samsung']
-        for company in companies:
-            if company in title:
-                return company.upper()
-        return "Various"
-    
-    def _extract_technology(self, article: Dict) -> str:
-        """Extract technology name from article"""
-        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
-        techs = ['oled', 'microled', 'miniled', 'qled', 'gan', 'sic', 'lidar', 'tof']
-        for tech in techs:
-            if tech in text:
-                return tech.upper()
-        return "New Technology"
-    
-    def _extract_supplier(self, article: Dict) -> str:
-        """Extract supplier name from article"""
-        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
-        suppliers = ['boe', 'csot', 'lg display', 'samsung display', 'qualcomm', 'mediatek', 'corning']
-        for supplier in suppliers:
-            if supplier in text:
-                return supplier.title()
-        return ""
-    
-    def _extract_location(self, article: Dict) -> str:
-        """Extract location from article"""
-        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
-        locations = ['vietnam', 'thailand', 'indonesia', 'india', 'malaysia', 'singapore']
-        for loc in locations:
-            if loc in text:
-                return loc.title()
-        return ""
-    
-    def _extract_risk(self, article: Dict) -> str:
-        """Extract risk type from article"""
-        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
-        if 'shortage' in text:
-            return "Component Shortage"
-        if 'tariff' in text or 'trade' in text:
-            return "Trade Policy"
-        if 'delay' in text:
-            return "Delivery Delay"
-        if 'quality' in text or 'recall' in text:
-            return "Quality Issue"
-        return "Supply Risk"
-    
-    def generate_html(self, markdown_content: str) -> str:
-        """Convert Markdown to HTML"""
-        import re
-        
-        date_str = datetime.now().strftime('%B %d, %Y')
-        
-        # Simple Markdown to HTML conversion
-        html = markdown_content
-        
-        # Headers
-        html = re.sub(r'^# (.*?)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
-        html = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
-        html = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
-        
-        # Bold
-        html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', html)
-        
-        # Links
-        html = re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2">\1</a>', html)
-        
-        # Tables
-        lines = html.split('\n')
-        in_table = False
-        table_html = []
-        result = []
-        
-        for line in lines:
-            if line.startswith('|') and not line.startswith('|---'):
-                if not in_table:
-                    in_table = True
-                    table_html = ['<table>']
-                cells = [c.strip() for c in line.split('|')[1:-1]]
-                if '<th>' not in str(table_html):
-                    table_html.append('<tr>' + ''.join(f'<th>{c}</th>' for c in cells) + '</tr>')
-                else:
-                    table_html.append('<tr>' + ''.join(f'<td>{c}</td>' for c in cells) + '</tr>')
-            elif in_table and line.strip() == '':
-                in_table = False
-                table_html.append('</table>')
-                result.append('\n'.join(table_html))
-            else:
-                if in_table:
-                    in_table = False
-                    table_html.append('</table>')
-                    result.append('\n'.join(table_html))
-                result.append(line)
-        
-        html = '\n'.join(result)
-        
-        # Wrap in full HTML template
-        return f"""<!DOCTYPE html>
-<html>
+        # Complete HTML template
+        html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Samsung CE Intelligence - {date_str}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f0f2f5;
             padding: 20px;
-            line-height: 1.6;
+            line-height: 1.5;
+            color: #1a1a2e;
         }}
+        
         .container {{
             max-width: 1400px;
             margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
         }}
+        
+        /* Header */
         .header {{
-            background: linear-gradient(135deg, #1428a0 0%, #0f1a5e 100%);
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 100%);
             color: white;
-            padding: 40px 50px;
+            padding: 30px 40px;
+            border-radius: 16px 16px 0 0;
+            margin-bottom: 0;
         }}
+        
         .header h1 {{
-            font-size: 2.2em;
-            margin-bottom: 10px;
+            font-size: 1.8em;
             font-weight: 600;
+            margin-bottom: 8px;
         }}
+        
+        .header .subtitle {{
+            color: #a0a0c0;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }}
+        
         .header .date {{
             color: #ffd700;
+            font-size: 1em;
+            margin-top: 10px;
+        }}
+        
+        /* Stats Bar */
+        .stats-bar {{
+            background: white;
+            padding: 20px 40px;
+            border-radius: 0 0 16px 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }}
+        
+        .stats-grid {{
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }}
+        
+        .stat-item {{
+            text-align: center;
+        }}
+        
+        .stat-number {{
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #1a1a3e;
+        }}
+        
+        .stat-label {{
+            font-size: 0.8em;
+            color: #666;
+        }}
+        
+        .impact-stats {{
+            display: flex;
+            gap: 20px;
+        }}
+        
+        .impact-stat {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+        }}
+        
+        /* Alerts Section */
+        .alerts-section {{
+            background: #fff3e0;
+            border-left: 4px solid #ff6b35;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            border-radius: 12px;
+        }}
+        
+        .alerts-title {{
+            font-weight: 700;
             font-size: 1.1em;
-            margin-top: 15px;
+            margin-bottom: 15px;
+            color: #c0392b;
         }}
-        .content {{
-            padding: 40px 50px;
+        
+        .alert-item {{
+            padding: 10px 0;
+            border-bottom: 1px solid #ffe0b3;
+            font-size: 0.9em;
         }}
-        h1 {{
-            color: #1428a0;
-            border-bottom: 3px solid #ffd700;
-            padding-bottom: 15px;
-            margin-bottom: 25px;
+        
+        .alert-item:last-child {{
+            border-bottom: none;
         }}
-        h2 {{
-            color: #1428a0;
-            margin: 30px 0 20px;
-            padding-left: 15px;
-            border-left: 5px solid #ffd700;
-        }}
-        h3 {{
-            color: #333;
-            margin: 20px 0 10px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 0.85em;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }}
-        th {{
-            background: #f0f2f5;
-            padding: 12px;
-            text-align: left;
+        
+        .alert-badge {{
+            background: #c0392b;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
             font-weight: 600;
-            border-bottom: 2px solid #1428a0;
+            margin-right: 12px;
+            display: inline-block;
         }}
-        td {{
-            padding: 10px 12px;
-            border-bottom: 1px solid #e2e8f0;
-            vertical-align: top;
+        
+        /* Topic Sections */
+        .topic-section {{
+            background: white;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }}
-        tr:hover {{
-            background: #f8fafc;
+        
+        .topic-title {{
+            background: linear-gradient(135deg, #1428a0 0%, #0f1a5e 100%);
+            color: white;
+            padding: 18px 25px;
+            font-size: 1.2em;
+            font-weight: 600;
+            margin: 0;
         }}
-        a {{
+        
+        .impact-summary {{
+            padding: 12px 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.8em;
+            color: #666;
+        }}
+        
+        .articles-grid {{
+            padding: 20px 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }}
+        
+        /* Article Card */
+        .article-card {{
+            border: 1px solid #e8e8e8;
+            border-radius: 12px;
+            padding: 18px 20px;
+            transition: all 0.2s ease;
+            background: #fff;
+        }}
+        
+        .article-card:hover {{
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #1428a0;
+        }}
+        
+        .article-card.impact-high {{
+            border-left: 4px solid #c0392b;
+            background: #fffaf8;
+        }}
+        
+        .article-card.impact-medium {{
+            border-left: 4px solid #e67e22;
+        }}
+        
+        .article-card.impact-low {{
+            border-left: 4px solid #27ae60;
+        }}
+        
+        .article-header {{
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }}
+        
+        .impact-badge {{
+            font-size: 0.7em;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #f0f0f0;
+        }}
+        
+        .article-card.impact-high .impact-badge {{
+            background: #c0392b;
+            color: white;
+        }}
+        
+        .article-card.impact-medium .impact-badge {{
+            background: #e67e22;
+            color: white;
+        }}
+        
+        .article-card.impact-low .impact-badge {{
+            background: #27ae60;
+            color: white;
+        }}
+        
+        .article-date {{
+            font-size: 0.7em;
+            color: #999;
+        }}
+        
+        .article-source {{
+            font-size: 0.7em;
+            color: #666;
+            background: #f5f5f5;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }}
+        
+        .article-title {{
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }}
+        
+        .article-title a {{
+            color: #1a1a3e;
+            text-decoration: none;
+        }}
+        
+        .article-title a:hover {{
+            color: #1428a0;
+            text-decoration: underline;
+        }}
+        
+        .article-summary {{
+            font-size: 0.85em;
+            color: #444;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }}
+        
+        .article-footer {{
+            text-align: right;
+        }}
+        
+        .source-link {{
+            font-size: 0.75em;
             color: #1428a0;
             text-decoration: none;
         }}
-        a:hover {{
+        
+        .source-link:hover {{
             text-decoration: underline;
         }}
+        
+        /* Footer */
         .footer {{
-            background: #f0f2f5;
-            padding: 20px 50px;
             text-align: center;
-            color: #64748b;
-            font-size: 0.85em;
-            border-top: 1px solid #e2e8f0;
+            padding: 30px;
+            color: #888;
+            font-size: 0.75em;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 20px;
         }}
+        
         @media (max-width: 768px) {{
-            .header, .content {{
+            body {{
+                padding: 10px;
+            }}
+            .header, .stats-bar {{
                 padding: 20px;
             }}
-            table {{
-                font-size: 0.75em;
+            .articles-grid {{
+                padding: 15px;
             }}
-            th, td {{
-                padding: 6px;
+            .stats-grid {{
+                gap: 15px;
+            }}
+            .stat-number {{
+                font-size: 1.2em;
             }}
         }}
     </style>
@@ -421,34 +597,51 @@ class ReportGenerator:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔵 Samsung Consumer Electronics</h1>
-            <p>Strategic Technology & Sourcing Intelligence</p>
-            <div class="date">📅 {date_str} · Daily Briefing</div>
+            <h1>Samsung Electronics · CE Strategic Sourcing</h1>
+            <div class="subtitle">Daily Technology &amp; Sourcing Intelligence</div>
+            <div class="subtitle">Competitor · Tech · Materials · CMF · Thermal · Manufacturing · Supply Chain · AI · Market</div>
+            <div class="date">{date_display}</div>
         </div>
-        <div class="content">
-            {self._markdown_to_html(html)}
+        
+        <div class="stats-bar">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number">{total_articles}</div>
+                    <div class="stat-label">Articles</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{len([t for t in topic_stats if topic_stats[t] > 0])}</div>
+                    <div class="stat-label">Topics</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">T1–T8</div>
+                    <div class="stat-label">HIGH→MED→LOW</div>
+                </div>
+            </div>
+            <div class="impact-stats">
+                <div class="impact-stat"><span style="color:#c0392b">🔴 HIGH</span> {impact_counts.get('high', 0)}</div>
+                <div class="impact-stat"><span style="color:#e67e22">🟡 MED</span> {impact_counts.get('medium', 0)}</div>
+                <div class="impact-stat"><span style="color:#27ae60">🟢 LOW</span> {impact_counts.get('low', 0)}</div>
+            </div>
         </div>
+        
+        <div class="alerts-section">
+            <div class="alerts-title">🔴 ALERTS — 今日高优先级情报</div>
+            {alerts_html}
+        </div>
+        
+        {''.join(topic_html)}
+        
         <div class="footer">
-            <p>🔵 Generated by Samsung CE Intelligence System v2.0</p>
-            <p>📡 Multi-source aggregation with 3-layer deduplication</p>
+            <p>🤖 Generated by Samsung CE Intelligence System · AI-powered summaries</p>
+            <p>📡 Multi-source aggregation with 3-layer deduplication · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
 </body>
-</html>"""
+</html>
+"""
+        return html
     
-    def _markdown_to_html(self, md: str) -> str:
-        """Convert markdown to HTML (basic)"""
-        import re
-        
-        # Convert paragraphs
-        paragraphs = re.split(r'\n\s*\n', md)
-        html_parts = []
-        
-        for para in paragraphs:
-            if para.strip():
-                if para.startswith('<h') or para.startswith('<td>') or para.startswith('<ul'):
-                    html_parts.append(para)
-                else:
-                    html_parts.append(f'<p>{para}</p>')
-        
-        return '\n'.join(html_parts)
+    def generate_html_from_articles(self, articles: List[Dict], stats: Dict = None) -> str:
+        """Public method to generate HTML report from articles"""
+        return self.generate_html(articles, stats)
