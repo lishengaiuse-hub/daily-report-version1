@@ -1,0 +1,8 @@
+# This file ensures the output/ directory is tracked by Git
+# Generated HTML and Markdown reports will be saved here
+# DO NOT commit generated reports to Git
+
+# Output files to ignore (add to .gitignore):
+# *.html
+# *.md
+# *.pdf
