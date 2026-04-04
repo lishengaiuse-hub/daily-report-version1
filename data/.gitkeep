@@ -1,0 +1,9 @@
+# This file ensures the data/ directory is tracked by Git
+# The database file (history.db) will be created here at runtime
+# DO NOT commit the actual database file to Git
+
+# Database files to ignore (add to .gitignore):
+# *.db
+# *.db-journal
+# *.sqlite
+# *.sqlite3
