@@ -59,6 +59,7 @@ class SamsungIntelligenceSystem:
                     'global_tech': ['https://techcrunch.com/feed/'],
                 },
                 'web_scraping': {},
+                'firecrawl': {},
                 'api': {}
             },
             'topics': {
@@ -152,8 +153,12 @@ class SamsungIntelligenceSystem:
             # Step 6: Generate report
             print("\n📊 Step 6: Generating report...")
             reporter = ReportGenerator(self.config)
+            
+            # Generate markdown report (backup)
             report_md = reporter.generate_markdown(deduped_articles, dedup_stats)
-            report_html = reporter.generate_html(report_md)
+            
+            # Generate HTML report - FIXED: pass articles list, not markdown string
+            report_html = reporter.generate_html(deduped_articles, dedup_stats)
             
             # Save reports
             output_dir = self.base_dir / "output"
@@ -174,13 +179,28 @@ class SamsungIntelligenceSystem:
             # Step 7: Send email (skip if dry run)
             if not dry_run:
                 print("\n📧 Step 7: Sending email...")
+                
+                # Debug email configuration
+                print("   🔍 Email debug info:")
+                print(f"      SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT SET')}")
+                print(f"      RECEIVER_EMAIL: {os.getenv('RECEIVER_EMAIL', 'NOT SET')}")
+                print(f"      SMTP_HOST: {os.getenv('SMTP_HOST', 'NOT SET')}")
+                print(f"      SMTP_PORT: {os.getenv('SMTP_PORT', 'NOT SET')}")
+                print(f"      SENDER_PASSWORD: {'✅ SET' if os.getenv('SENDER_PASSWORD') else '❌ NOT SET'}")
+                
                 email_config = self.config.get('email', {})
                 mailer = EmailSender(email_config)
-                success = mailer.send(report_html, datetime.now().strftime('%Y-%m-%d'))
-                if success:
-                    print("   ✅ Email sent successfully!")
+                
+                # Check if HTML content is not empty
+                if not report_html:
+                    print("   ❌ Report HTML is empty, cannot send email")
                 else:
-                    print("   ❌ Failed to send email. Check logs above.")
+                    print(f"   📄 Report HTML size: {len(report_html)} characters")
+                    success = mailer.send(report_html, datetime.now().strftime('%Y-%m-%d'))
+                    if success:
+                        print("   ✅ Email sent successfully!")
+                    else:
+                        print("   ❌ Failed to send email. Check logs above.")
             else:
                 print("\n📧 Step 7: Skipping email (dry run mode)")
             
@@ -213,16 +233,19 @@ class SamsungIntelligenceSystem:
         high_domains = [
             "reuters.com", "bloomberg.com", "wsj.com", "ft.com",
             "semiengineering.com", "digitimes.com", "trendforce.com",
-            "counterpointresearch.com", "ieee.org"
+            "counterpointresearch.com", "ieee.org", "eetimes.com"
         ]
         medium_domains = [
             "techcrunch.com", "theverge.com", "engadget.com",
-            "oled-info.com", "ledinside.cn", "technews.tw",
-            "cnpowder.com.cn", "eetimes.com"
+            "oled-info.com", "microled-info.com", "ledinside.cn", 
+            "technews.tw", "cnpowder.com.cn", "ithome.com",
+            "36kr.com", "leiphone.com", "pingwest.com", "thelec.net",
+            "vietnam-briefing.com", "thailand-briefing.com", "ifanr.com",
+            "anzhuo.cn", "sina.com.cn", "qq.com"
         ]
         low_domains = [
             "abnotebook.com", "leikeji.com", "abvr360.com",
-            "aibangbots.com", "polytpe.com", "weibo.com"
+            "aibangbots.com", "polytpe.com", "weibo.com", "zhihu.com"
         ]
         
         source_lower = source.lower()
@@ -245,6 +268,14 @@ class SamsungIntelligenceSystem:
         print("📧 Testing Email Configuration Only")
         print("=" * 70)
         
+        # Debug email configuration
+        print("\n🔍 Email configuration check:")
+        print(f"   SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT SET')}")
+        print(f"   RECEIVER_EMAIL: {os.getenv('RECEIVER_EMAIL', 'NOT SET')}")
+        print(f"   SMTP_HOST: {os.getenv('SMTP_HOST', 'NOT SET')}")
+        print(f"   SMTP_PORT: {os.getenv('SMTP_PORT', 'NOT SET')}")
+        print(f"   SENDER_PASSWORD: {'✅ SET' if os.getenv('SENDER_PASSWORD') else '❌ NOT SET'}")
+        
         email_config = self.config.get('email', {})
         mailer = EmailSender(email_config)
         
@@ -254,14 +285,70 @@ class SamsungIntelligenceSystem:
         <head>
             <meta charset="UTF-8">
             <title>Test Email</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 20px;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background: white;
+                    border-radius: 16px;
+                    padding: 30px;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #1428a0 0%, #0f1a5e 100%);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 12px;
+                    text-align: center;
+                    margin-bottom: 20px;
+                }}
+                .content {{
+                    line-height: 1.6;
+                    color: #333;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #eee;
+                    text-align: center;
+                    color: #666;
+                    font-size: 12px;
+                }}
+                .success {{
+                    color: #10b981;
+                    font-weight: bold;
+                }}
+            </style>
         </head>
         <body>
-            <h1>Samsung CE Intelligence - Test Email</h1>
-            <p>This is a test email to verify SMTP configuration.</p>
-            <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            <p><strong>System:</strong> Samsung CE Intelligence System</p>
-            <hr>
-            <p>If you received this, email configuration is working correctly!</p>
+            <div class="container">
+                <div class="header">
+                    <h1>🔵 Samsung CE Intelligence</h1>
+                    <p>Email Configuration Test</p>
+                </div>
+                <div class="content">
+                    <p><span class="success">✅ Test email sent successfully!</span></p>
+                    <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p><strong>Sender:</strong> {os.getenv('SENDER_EMAIL', 'NOT SET')}</p>
+                    <p><strong>Recipient:</strong> {os.getenv('RECEIVER_EMAIL', 'NOT SET')}</p>
+                    <p>If you received this email, your SMTP configuration is working correctly.</p>
+                    <hr>
+                    <p><strong>Next Steps:</strong></p>
+                    <ol>
+                        <li>Run <code>python src/main.py --dry-run</code> to test full system</li>
+                        <li>Run <code>python src/main.py</code> to send real reports</li>
+                        <li>Check GitHub Actions for automated runs</li>
+                    </ol>
+                </div>
+                <div class="footer">
+                    <p>Samsung CE Intelligence System v3.0</p>
+                </div>
+            </div>
         </body>
         </html>
         """
