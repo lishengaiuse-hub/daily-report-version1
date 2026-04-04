@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Multi-method web crawler supporting RSS, HTTP, Firecrawl, and Playwright
+Multi-method web crawler supporting RSS, HTTP, Firecrawl, and Topic-Specific Search
+Version: 3.0 - Includes topic coverage guarantee and active keyword search
 """
 
 import re
 import time
 import hashlib
-from datetime import datetime
-from typing import List, Dict, Optional, Any
-from urllib.parse import urlparse, urljoin
-
 import feedparser
 import requests
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional, Any
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
 # Firecrawl 可选导入
@@ -25,7 +25,7 @@ except ImportError:
 
 
 class ArticleFetcher:
-    """Fetch articles from multiple source types"""
+    """Fetch articles from multiple source types with topic-specific search"""
     
     def __init__(self, config: Dict):
         self.config = config
@@ -39,10 +39,9 @@ class ArticleFetcher:
             'Upgrade-Insecure-Requests': '1'
         })
         
-        # 初始化 Firecrawl 客户端
+        # Initialize Firecrawl client
         self.firecrawl = None
         if FIRECRAWL_AVAILABLE:
-            import os
             api_key = os.getenv("FIRECRAWL_API_KEY")
             if api_key:
                 try:
@@ -54,6 +53,10 @@ class ArticleFetcher:
                 print("⚠️ FIRECRAWL_API_KEY not set, Firecrawl disabled")
         
         self.results = []
+    
+    # =============================================
+    # RSS FETCHING
+    # =============================================
     
     def fetch_rss(self, url: str) -> List[Dict]:
         """Fetch and parse RSS feed"""
@@ -82,6 +85,10 @@ class ArticleFetcher:
         except Exception as e:
             print(f"  ⚠️ RSS fetch failed for {url}: {e}")
         return articles
+    
+    # =============================================
+    # WEB PAGE SCRAPING
+    # =============================================
     
     def fetch_webpage(self, source_config: Dict) -> List[Dict]:
         """Fetch articles from HTML webpage using CSS selectors"""
@@ -131,6 +138,10 @@ class ArticleFetcher:
         
         return articles
     
+    # =============================================
+    # FIRECRAWL (Dynamic JavaScript Sites)
+    # =============================================
+    
     def fetch_with_firecrawl(self, url: str, source_name: str = "unknown", 
                               wait_for: int = 3000, limit: int = 20) -> List[Dict]:
         """
@@ -173,7 +184,6 @@ class ArticleFetcher:
             links = scrape_result.get('links', [])
             
             # Try to extract article titles from markdown content
-            # Look for heading patterns that might be article titles
             title_patterns = [
                 r'^#\s+(.+)$',      # H1
                 r'^##\s+(.+)$',     # H2
@@ -185,7 +195,7 @@ class ArticleFetcher:
             lines = markdown_content.split('\n')
             potential_titles = []
             
-            for line in lines[:100]:  # Check first 100 lines
+            for line in lines[:100]:
                 line = line.strip()
                 if not line or len(line) < 5 or len(line) > 200:
                     continue
@@ -201,14 +211,11 @@ class ArticleFetcher:
             # Also extract from links that look like articles
             article_links = []
             for link in links[:limit]:
-                # Filter for article-like URLs
                 if self._is_article_link(link, url):
                     article_links.append(link)
             
             # Build articles from extracted data
-            # Priority 1: Use extracted titles with their context
             for i, title in enumerate(potential_titles[:limit]):
-                # Try to find a link for this title
                 link = url
                 for article_link in article_links:
                     if title.lower().replace(' ', '') in article_link.lower():
@@ -247,57 +254,118 @@ class ArticleFetcher:
         
         return articles
     
-    def _is_article_link(self, link: str, base_url: str) -> bool:
-        """Determine if a URL looks like an article link"""
-        if not link or not link.startswith('http'):
-            return False
-        
-        # Exclude common non-article paths
-        exclude_patterns = [
-            '/tag/', '/category/', '/author/', '/page/', 
-            '/search', '/login', '/register', '/about',
-            '/contact', '/privacy', '/terms', '.css', '.js',
-            '.jpg', '.png', '.gif', '.pdf'
-        ]
-        
-        for pattern in exclude_patterns:
-            if pattern in link.lower():
-                return False
-        
-        # Include patterns that suggest article content
-        include_patterns = [
-            '/news/', '/article/', '/post/', '/p/', 
-            '/story/', '/content/', '/read/', '/detail/',
-            '/a/', '/2026/', '/2025/'
-        ]
-        
-        for pattern in include_patterns:
-            if pattern in link.lower():
-                return True
-        
-        # If link is from same domain and has reasonable length
-        if base_url in link and len(link.split('/')) >= 4:
-            return True
-        
-        return False
+    # =============================================
+    # TOPIC-SPECIFIC ACTIVE SEARCH (NEW)
+    # =============================================
     
-    def _extract_title_from_url(self, url: str) -> str:
-        """Extract a readable title from URL"""
-        # Remove protocol and domain
-        path = url.replace('https://', '').replace('http://', '')
-        path = path.split('/', 1)[-1] if '/' in path else path
+    def fetch_by_topic(self, topic_id: int, topic_sources: Dict[int, List[str]], 
+                       topic_keywords: Dict[int, List[str]], days_back: int = 3) -> List[Dict]:
+        """
+        Actively fetch articles for a specific topic using keywords and sources
         
-        # Remove extension
-        path = re.sub(r'\.[^/.]+$', '', path)
+        Args:
+            topic_id: Topic ID (1-5)
+            topic_sources: Dictionary mapping topic_id to list of source domains
+            topic_keywords: Dictionary mapping topic_id to list of search keywords
+            days_back: Days to look back for news
         
-        # Replace separators with spaces
-        title = re.sub(r'[-_/]', ' ', path)
+        Returns:
+            List of articles for this topic
+        """
+        articles = []
+        sources = topic_sources.get(topic_id, [])
+        keywords = topic_keywords.get(topic_id, [])
         
-        # Capitalize words
-        words = title.split()
-        title = ' '.join(words[:8])  # Limit to 8 words
+        print(f"     🔍 Active search for Topic {topic_id} with {len(keywords)} keywords...")
         
-        return title[:100] if title else "Article"
+        # Method 1: Google News RSS search using keywords
+        for keyword in keywords[:8]:  # Limit to top 8 keywords
+            encoded_keyword = requests.utils.quote(keyword)
+            
+            # Search for recent news
+            search_urls = [
+                f"https://news.google.com/rss/search?q={encoded_keyword}&hl=en-US&gl=US&ceid=US:en",
+                f"https://news.google.com/rss/search?q={encoded_keyword}+after:{days_back}+days&hl=en-US"
+            ]
+            
+            for url in search_urls:
+                try:
+                    feed = feedparser.parse(url)
+                    for entry in feed.entries[:5]:
+                        # Check if article is recent
+                        published = entry.get('published', '')
+                        if published:
+                            pub_date = self._parse_date(published)
+                            if pub_date and (datetime.now() - pub_date).days > days_back:
+                                continue
+                        
+                        article = {
+                            'title': self._clean_text(entry.get('title', '')),
+                            'summary': self._clean_text(entry.get('summary', '')[:500]),
+                            'content': '',
+                            'link': entry.get('link', ''),
+                            'published_raw': published,
+                            'source': 'google_news_search',
+                            'fetch_method': 'topic_search',
+                            'search_keyword': keyword,
+                            'topics_hint': [topic_id]
+                        }
+                        if article['title'] and article['link'] and len(article['title']) > 10:
+                            articles.append(article)
+                except Exception as e:
+                    print(f"       ⚠️ Google News search failed for '{keyword}': {e}")
+            
+            time.sleep(0.3)  # Rate limiting
+        
+        # Method 2: Direct source RSS fetching
+        print(f"     📡 Checking {len(sources)} topic-specific sources...")
+        for source_domain in sources[:10]:
+            # Try common RSS feed paths
+            feed_urls = [
+                f"https://{source_domain}/feed",
+                f"https://{source_domain}/rss",
+                f"https://{source_domain}/news/feed",
+                f"https://{source_domain}/rss.xml"
+            ]
+            
+            for feed_url in feed_urls:
+                try:
+                    feed = feedparser.parse(feed_url)
+                    if feed.entries:
+                        for entry in feed.entries[:5]:
+                            article = {
+                                'title': self._clean_text(entry.get('title', '')),
+                                'summary': self._clean_text(entry.get('summary', '')[:500]),
+                                'content': '',
+                                'link': entry.get('link', ''),
+                                'published_raw': entry.get('published', ''),
+                                'source': source_domain,
+                                'fetch_method': 'topic_source',
+                                'topics_hint': [topic_id]
+                            }
+                            if article['title'] and article['link'] and len(article['title']) > 10:
+                                articles.append(article)
+                        break  # Found working feed
+                except Exception:
+                    continue
+            
+            time.sleep(0.3)
+        
+        # Remove duplicates within this batch
+        seen_titles = set()
+        unique_articles = []
+        for article in articles:
+            title_key = article['title'][:50].lower()
+            if title_key not in seen_titles:
+                seen_titles.add(title_key)
+                unique_articles.append(article)
+        
+        print(f"     ✅ Found {len(unique_articles)} unique articles for Topic {topic_id}")
+        return unique_articles[:20]  # Limit per topic
+    
+    # =============================================
+    # API FETCHING
+    # =============================================
     
     def fetch_api(self, source_config: Dict) -> List[Dict]:
         """Fetch from REST API endpoint"""
@@ -348,6 +416,72 @@ class ArticleFetcher:
         
         return articles
     
+    # =============================================
+    # MAIN FETCH METHOD
+    # =============================================
+    
+    def fetch_all(self, sources: Dict) -> List[Dict]:
+        """Fetch from all configured sources"""
+        all_articles = []
+        
+        # RSS Feeds (priority 1)
+        print("📡 Fetching RSS feeds...")
+        rss_sources = sources.get('rss', {})
+        for category, urls in rss_sources.items():
+            for url in urls:
+                print(f"  📰 RSS: {url[:60]}...")
+                articles = self.fetch_rss(url)
+                all_articles.extend(articles)
+                time.sleep(0.5)
+        
+        # Web Scraping (priority 2)
+        print("🕸️  Fetching web pages...")
+        web_sources = sources.get('web_scraping', {})
+        for name, config in web_sources.items():
+            url = config.get('url', '')
+            if url:
+                print(f"  🌐 {name}: {url[:60]}...")
+                articles = self.fetch_webpage(config)
+                all_articles.extend(articles)
+                time.sleep(1)
+        
+        # Firecrawl Sources (priority 2.5 - for dynamic sites)
+        if self.firecrawl:
+            print("🔥 Fetching with Firecrawl...")
+            firecrawl_sources = sources.get('firecrawl', {})
+            for name, config in firecrawl_sources.items():
+                url = config.get('url', '')
+                if url:
+                    print(f"  🔥 {name}: {url[:60]}...")
+                    articles = self.fetch_with_firecrawl(
+                        url=url,
+                        source_name=name,
+                        wait_for=config.get('wait_for', 3000),
+                        limit=config.get('limit', 15)
+                    )
+                    all_articles.extend(articles)
+                    time.sleep(2)
+        else:
+            print("🔥 Firecrawl not available - skipping dynamic sites")
+        
+        # API Sources (priority 3)
+        print("🔌 Fetching APIs...")
+        api_sources = sources.get('api', {})
+        for name, config in api_sources.items():
+            url = config.get('url', '')
+            if url:
+                print(f"  📡 {name}: {url[:60]}...")
+                articles = self.fetch_api(config)
+                all_articles.extend(articles)
+                time.sleep(0.5)
+        
+        print(f"✅ Total fetched: {len(all_articles)} articles")
+        return all_articles
+    
+    # =============================================
+    # HELPER METHODS
+    # =============================================
+    
     def _clean_text(self, text: str) -> str:
         """Clean HTML and normalize text"""
         if not text:
@@ -371,53 +505,74 @@ class ArticleFetcher:
                     return self._clean_text(value['rendered'])
         return ""
     
-    def fetch_all(self, sources: Dict) -> List[Dict]:
-        """Fetch from all configured sources"""
-        all_articles = []
+    def _is_article_link(self, link: str, base_url: str) -> bool:
+        """Determine if a URL looks like an article link"""
+        if not link or not link.startswith('http'):
+            return False
         
-        # RSS Feeds (priority 1)
-        print("📡 Fetching RSS feeds...")
-        rss_sources = sources.get('rss', {})
-        for category, urls in rss_sources.items():
-            for url in urls:
-                print(f"  📰 RSS: {url[:60]}...")
-                articles = self.fetch_rss(url)
-                all_articles.extend(articles)
-                time.sleep(0.5)
+        # Exclude common non-article paths
+        exclude_patterns = [
+            '/tag/', '/category/', '/author/', '/page/', 
+            '/search', '/login', '/register', '/about',
+            '/contact', '/privacy', '/terms', '.css', '.js',
+            '.jpg', '.png', '.gif', '.pdf'
+        ]
         
-        # Web Scraping (priority 2)
-        print("🕸️  Fetching web pages...")
-        web_sources = sources.get('web_scraping', {})
-        for name, config in web_sources.items():
-            print(f"  🌐 {name}: {config.get('url', '')[:60]}...")
-            articles = self.fetch_webpage(config)
-            all_articles.extend(articles)
-            time.sleep(1)
+        for pattern in exclude_patterns:
+            if pattern in link.lower():
+                return False
         
-        # Firecrawl Sources (priority 2.5 - for dynamic sites)
-        print("🔥 Fetching with Firecrawl...")
-        firecrawl_sources = sources.get('firecrawl', {})
-        for name, config in firecrawl_sources.items():
-            url = config.get('url', '')
-            if url:
-                print(f"  🔥 {name}: {url[:60]}...")
-                articles = self.fetch_with_firecrawl(
-                    url=url,
-                    source_name=name,
-                    wait_for=config.get('wait_for', 3000),
-                    limit=config.get('limit', 15)
-                )
-                all_articles.extend(articles)
-                time.sleep(2)  # Longer delay for Firecrawl
+        # Include patterns that suggest article content
+        include_patterns = [
+            '/news/', '/article/', '/post/', '/p/', 
+            '/story/', '/content/', '/read/', '/detail/',
+            '/a/', '/2026/', '/2025/'
+        ]
         
-        # API Sources (priority 3)
-        print("🔌 Fetching APIs...")
-        api_sources = sources.get('api', {})
-        for name, config in api_sources.items():
-            print(f"  📡 {name}: {config.get('url', '')[:60]}...")
-            articles = self.fetch_api(config)
-            all_articles.extend(articles)
-            time.sleep(0.5)
+        for pattern in include_patterns:
+            if pattern in link.lower():
+                return True
         
-        print(f"✅ Total fetched: {len(all_articles)} articles")
-        return all_articles
+        # If link is from same domain and has reasonable length
+        if base_url in link and len(link.split('/')) >= 4:
+            return True
+        
+        return False
+    
+    def _extract_title_from_url(self, url: str) -> str:
+        """Extract a readable title from URL"""
+        # Remove protocol and domain
+        path = url.replace('https://', '').replace('http://', '')
+        path = path.split('/', 1)[-1] if '/' in path else path
+        
+        # Remove extension
+        path = re.sub(r'\.[^/.]+$', '', path)
+        
+        # Replace separators with spaces
+        title = re.sub(r'[-_/]', ' ', path)
+        
+        # Capitalize words
+        words = title.split()
+        title = ' '.join(words[:8])
+        
+        return title[:100] if title else "Article"
+    
+    def _parse_date(self, date_string: str) -> Optional[datetime]:
+        """Parse date string to datetime"""
+        if not date_string:
+            return None
+        
+        try:
+            # Try common RSS date formats
+            from email.utils import parsedate_to_datetime
+            return parsedate_to_datetime(date_string)
+        except:
+            pass
+        
+        try:
+            from dateutil import parser
+            return parser.parse(date_string)
+        except:
+            pass
+        
+        return None
