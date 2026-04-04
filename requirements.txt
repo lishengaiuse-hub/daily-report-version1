@@ -6,6 +6,9 @@ lxml==4.9.3
 # RSS Parsing
 feedparser==6.0.10
 
+# Firecrawl - 动态网页抓取
+firecrawl-py==1.0.0
+
 # Deduplication (URL + Title only)
 rapidfuzz==3.5.2
 
@@ -24,5 +27,3 @@ openai==0.28.1
 # Testing
 pytest==7.4.0
 pytest-cov==4.1.0
-
-# Note: numpy and sentence-transformers removed for stability
