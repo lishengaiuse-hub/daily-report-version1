@@ -3,13 +3,12 @@
 """
 Report Generator for Samsung CE Intelligence
 Generates professional HTML and Markdown reports with AI-powered summaries
-Format reference: https://lishengaiuse-hub.github.io/Weekly-report/samsung_ce_intel_report_20260330
 """
 
 import os
 import re
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from collections import defaultdict
 import openai
 
@@ -44,24 +43,12 @@ class ReportGenerator:
             openai.api_base = "https://api.deepseek.com/v1"
     
     def _generate_ai_summary(self, title: str, content: str, impact_level: str = "medium") -> str:
-        """
-        Generate AI-powered summary for a single news item
-        
-        Args:
-            title: News title
-            content: News content or summary
-            impact_level: HIGH/MEDIUM/LOW impact level
-        
-        Returns:
-            Concise 1-2 sentence summary
-        """
+        """Generate AI-powered summary for a single news item"""
         if not self.ai_enabled or not content:
-            # Fallback: use title + first 100 chars of content
             summary = content[:150] if content else title
             return summary + "..." if len(summary) >= 150 else summary
         
         try:
-            # Map impact level to prompt emphasis
             emphasis = {
                 'high': '重点突出其对三星的紧迫影响和行动建议。',
                 'medium': '客观总结事件内容，说明对三星的潜在影响。',
@@ -93,34 +80,25 @@ class ReportGenerator:
             
         except Exception as e:
             print(f"⚠️ AI summary failed for '{title[:50]}': {e}")
-            # Fallback: extract first sentence
             first_sentence = content.split('。')[0] if content else title
             return first_sentence[:120] + ("..." if len(first_sentence) > 120 else "")
     
     def _determine_impact(self, article: Dict, topic_id: int) -> str:
-        """
-        Determine impact level based on content and topic
-        
-        Returns: 'high', 'medium', or 'low'
-        """
+        """Determine impact level based on content and topic"""
         text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
         
-        # High impact keywords
         high_keywords = [
             '发布', '推出', '上市', '价格', '降价', '市场份额', '超越', '首次',
             '突破', '革命性', '颠覆', '关税', '制裁', '断供', '短缺',
             '越南', '印度', '工厂', '投资', '扩产', '战略合作'
         ]
         
-        # Medium impact keywords  
         medium_keywords = [
             '升级', '改进', '优化', '展示', '亮相', '参展', '论坛',
             '趋势', '预测', '增长', '下降', '调整', '政策'
         ]
         
-        # Topic-specific impact boosting
-        topic_high = [1, 3, 5, 6]  # Competitors, Manufacturing, Supply Chain, Cost
-        topic_medium = [2, 4, 7, 8]  # Tech, Exhibitions, AI, Market
+        topic_high = [1, 3, 5, 6]
         
         score = 0
         for kw in high_keywords:
@@ -130,13 +108,9 @@ class ReportGenerator:
             if kw in text:
                 score += 1
         
-        # Boost by topic
         if topic_id in topic_high:
             score += 1
-        elif topic_id in topic_medium:
-            score += 0
         
-        # Check source reliability
         reliability = article.get('reliability_score', 0.6)
         if reliability >= 0.9:
             score += 1
@@ -148,49 +122,6 @@ class ReportGenerator:
         else:
             return 'low'
     
-    def _format_article_card(self, article: Dict, index: int, topic_id: int) -> str:
-        """
-        Format a single article as an HTML card with impact label and summary
-        """
-        title = article.get('title', '无标题')
-        summary = article.get('summary', article.get('content', ''))
-        link = article.get('link', '#')
-        source = article.get('source', '未知来源')
-        
-        # Generate AI summary if available
-        impact = self._determine_impact(article, topic_id)
-        ai_summary = self._generate_ai_summary(title, summary, impact)
-        
-        impact_display = self.impact_levels.get(impact, '🟡 MED')
-        
-        # Format date if available
-        pub_date = article.get('published_date')
-        date_str = ""
-        if pub_date:
-            if isinstance(pub_date, datetime):
-                date_str = pub_date.strftime('%Y-%m-%d')
-            elif isinstance(pub_date, str):
-                date_str = pub_date[:10]
-        
-        return f"""
-        <div class="article-card impact-{impact}">
-            <div class="article-header">
-                <span class="impact-badge">{impact_display}</span>
-                <span class="article-date">{date_str}</span>
-                <span class="article-source">📎 {source}</span>
-            </div>
-            <div class="article-title">
-                <a href="{link}" target="_blank" rel="noopener noreferrer">{self._escape_html(title)}</a>
-            </div>
-            <div class="article-summary">
-                {self._escape_html(ai_summary)}
-            </div>
-            <div class="article-footer">
-                <a href="{link}" class="source-link" target="_blank">🔗 Read Source Article</a>
-            </div>
-        </div>
-        """
-    
     def _escape_html(self, text: str) -> str:
         """Escape HTML special characters"""
         if not text:
@@ -201,7 +132,7 @@ class ReportGenerator:
                     .replace('"', '&quot;')
                     .replace("'", '&#39;'))
     
-    def generate_markdown(self, articles: List[Dict], stats: Dict) -> str:
+    def generate_markdown(self, articles: List[Dict], stats: Dict = None) -> str:
         """Generate Markdown report (simplified version for backup)"""
         date_str = datetime.now().strftime('%Y-%m-%d')
         
@@ -211,13 +142,27 @@ class ReportGenerator:
 
 ## Executive Summary
 - **Total unique articles:** {len(articles)}
-- **Duplicates removed:** {stats.get('duplicates_removed', 0)}
+- **Duplicates removed:** {stats.get('duplicates_removed', 0) if stats else 0}
 
 """
         return report
     
-    def generate_html(self, articles: List[Dict], stats: Dict = None) -> str:
-        """Generate professional HTML report with AI summaries"""
+    def generate_html(self, articles: Union[List[Dict], str], stats: Dict = None) -> str:
+        """
+        Generate professional HTML report with AI summaries
+        
+        Args:
+            articles: List of article dictionaries OR markdown string (fallback)
+            stats: Optional statistics dictionary
+        """
+        # Handle fallback case (when markdown string is passed)
+        if isinstance(articles, str):
+            print("⚠️ generate_html received markdown string, returning simple HTML")
+            return self._markdown_to_html(articles)
+        
+        # Normal case: articles is a list
+        if not articles:
+            return "<html><body><h1>No articles found</h1></body></html>"
         
         date_str = datetime.now().strftime('%Y-%m-%d')
         date_display = datetime.now().strftime('%B %d, %Y')
@@ -255,7 +200,7 @@ class ReportGenerator:
             ))
             
             articles_html = []
-            for idx, article in enumerate(topic_articles[:25]):  # Limit per topic
+            for idx, article in enumerate(topic_articles[:25]):
                 articles_html.append(self._format_article_card(article, idx, topic_id))
             
             topic_html.append(f"""
@@ -270,10 +215,10 @@ class ReportGenerator:
             </div>
             """)
         
-        # Generate priority alerts section (top high-impact articles)
+        # Generate priority alerts section
         high_impact_alerts = []
         for topic_id, topic_articles in articles_by_topic.items():
-            for article in topic_articles[:3]:  # Top 3 per topic
+            for article in topic_articles[:3]:
                 if self._determine_impact(article, topic_id) == 'high':
                     title = article.get('title', '')[:100]
                     summary = self._generate_ai_summary(
@@ -291,7 +236,7 @@ class ReportGenerator:
         alerts_html = ''.join(high_impact_alerts[:8]) if high_impact_alerts else '<div class="alert-item">无高优先级警报</div>'
         
         # Complete HTML template
-        html = f"""<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -313,7 +258,6 @@ class ReportGenerator:
             margin: 0 auto;
         }}
         
-        /* Header */
         .header {{
             background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 100%);
             color: white;
@@ -340,7 +284,6 @@ class ReportGenerator:
             margin-top: 10px;
         }}
         
-        /* Stats Bar */
         .stats-bar {{
             background: white;
             padding: 20px 40px;
@@ -387,7 +330,6 @@ class ReportGenerator:
             font-size: 0.9em;
         }}
         
-        /* Alerts Section */
         .alerts-section {{
             background: #fff3e0;
             border-left: 4px solid #ff6b35;
@@ -424,7 +366,6 @@ class ReportGenerator:
             display: inline-block;
         }}
         
-        /* Topic Sections */
         .topic-section {{
             background: white;
             border-radius: 16px;
@@ -457,7 +398,6 @@ class ReportGenerator:
             gap: 20px;
         }}
         
-        /* Article Card */
         .article-card {{
             border: 1px solid #e8e8e8;
             border-radius: 12px;
@@ -565,7 +505,6 @@ class ReportGenerator:
             text-decoration: underline;
         }}
         
-        /* Footer */
         .footer {{
             text-align: center;
             padding: 30px;
@@ -638,10 +577,53 @@ class ReportGenerator:
         </div>
     </div>
 </body>
-</html>
-"""
-        return html
+</html>"""
     
-    def generate_html_from_articles(self, articles: List[Dict], stats: Dict = None) -> str:
-        """Public method to generate HTML report from articles"""
-        return self.generate_html(articles, stats)
+    def _format_article_card(self, article: Dict, index: int, topic_id: int) -> str:
+        """Format a single article as an HTML card"""
+        title = article.get('title', '无标题')
+        summary = article.get('summary', article.get('content', ''))
+        link = article.get('link', '#')
+        source = article.get('source', '未知来源')
+        
+        impact = self._determine_impact(article, topic_id)
+        ai_summary = self._generate_ai_summary(title, summary, impact)
+        impact_display = self.impact_levels.get(impact, '🟡 MED')
+        
+        pub_date = article.get('published_date')
+        date_str = ""
+        if pub_date:
+            if isinstance(pub_date, datetime):
+                date_str = pub_date.strftime('%Y-%m-%d')
+            elif isinstance(pub_date, str):
+                date_str = pub_date[:10]
+        
+        return f"""
+        <div class="article-card impact-{impact}">
+            <div class="article-header">
+                <span class="impact-badge">{impact_display}</span>
+                <span class="article-date">{date_str}</span>
+                <span class="article-source">📎 {self._escape_html(source)}</span>
+            </div>
+            <div class="article-title">
+                <a href="{link}" target="_blank" rel="noopener noreferrer">{self._escape_html(title)}</a>
+            </div>
+            <div class="article-summary">
+                {self._escape_html(ai_summary)}
+            </div>
+            <div class="article-footer">
+                <a href="{link}" class="source-link" target="_blank">🔗 Read Source Article</a>
+            </div>
+        </div>
+        """
+    
+    def _markdown_to_html(self, md: str) -> str:
+        """Convert markdown to simple HTML (fallback)"""
+        md = md.replace('\n', '<br>')
+        return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Report</title></head>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+{md}
+</body>
+</html>"""
