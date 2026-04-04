@@ -3,7 +3,6 @@
 """
 Multi-Layer Deduplication Module for Samsung CE Intelligence
 Simplified version - no external ML dependencies
-Implements URL hash and title similarity deduplication
 """
 
 import hashlib
@@ -99,10 +98,11 @@ class Deduplicator:
             parsed = urlparse(url)
             
             # Remove ignored parameters
-            if self.config.get('url_hash', {}).get('ignore_params'):
-                ignore_params = set(self.config['url_hash']['ignore_params'])
+            ignore_params = self.config.get('url_hash', {}).get('ignore_params', [])
+            if ignore_params:
+                ignore_params_set = set(ignore_params)
                 query_params = parse_qs(parsed.query)
-                filtered_params = {k: v for k, v in query_params.items() if k not in ignore_params}
+                filtered_params = {k: v for k, v in query_params.items() if k not in ignore_params_set}
                 
                 # Rebuild query string
                 new_query = urlencode(filtered_params, doseq=True) if filtered_params else ''
@@ -170,16 +170,19 @@ class Deduplicator:
             return True, {'id': existing[0], 'title': existing[1]}, "URL (history)"
         
         # Check title similarity against last N days
-        cutoff_date = (datetime.now() - timedelta(days=self.config.get('history_days', 7))).isoformat()
+        history_days = self.config.get('history_days', 7)
+        cutoff_date = (datetime.now() - timedelta(days=history_days)).isoformat()
         cursor = self.conn.execute(
             "SELECT id, title, url FROM articles WHERE fetched_date > ?",
             (cutoff_date,)
         )
         
         article_title = article.get('title', '')
+        title_threshold = self.config.get('title', {}).get('threshold', 0.9)
+        
         for existing in cursor.fetchall():
             similarity = self._compute_title_similarity(article_title, existing[1])
-            if similarity >= self.config.get('title', {}).get('threshold', 0.9):
+            if similarity >= title_threshold:
                 return True, {'id': existing[0], 'title': existing[1]}, f"Title (similarity: {similarity:.2f})"
         
         return False, None, ""
@@ -188,13 +191,17 @@ class Deduplicator:
         """Deduplicate within the current batch"""
         kept = []
         
+        # Get config with safe defaults
+        url_hash_config = self.config.get('url_hash', {'enabled': True})
+        title_config = self.config.get('title', {'enabled': True, 'threshold': 0.9})
+        
         for article in articles:
             is_duplicate = False
             duplicate_reason = ""
             duplicate_with = None
             
             # Layer 1: URL hash check
-            if self.config.get('url_hash', {}).get('enabled', True):
+            if url_hash_config.get('enabled', True):
                 article_url_hash = self._compute_url_hash(article.get('link', article.get('url', '')))
                 for existing in kept:
                     existing_url_hash = self._compute_url_hash(existing.get('link', existing.get('url', '')))
@@ -206,8 +213,8 @@ class Deduplicator:
                         break
             
             # Layer 2: Title similarity
-            if not is_duplicate and self.config.get('title', {}).get('enabled', True):
-                threshold = self.config['title']['threshold']
+            if not is_duplicate and title_config.get('enabled', True):
+                threshold = title_config.get('threshold', 0.9)
                 article_title = article.get('title', '')
                 for existing in kept:
                     similarity = self._compute_title_similarity(article_title, existing.get('title', ''))
@@ -220,12 +227,13 @@ class Deduplicator:
             
             if is_duplicate:
                 self.stats['duplicates_removed'] += 1
-                self.stats['removed_items'].append({
-                    'title': article.get('title', 'Unknown'),
-                    'url': article.get('link', article.get('url', '')),
-                    'reason': duplicate_reason,
-                    'duplicate_of': duplicate_with.get('title', 'unknown') if duplicate_with else "unknown"
-                })
+                if len(self.stats['removed_items']) < 20:
+                    self.stats['removed_items'].append({
+                        'title': article.get('title', 'Unknown')[:50],
+                        'url': article.get('link', article.get('url', '')),
+                        'reason': duplicate_reason,
+                        'duplicate_of': duplicate_with.get('title', 'unknown')[:50] if duplicate_with else "unknown"
+                    })
                 # Apply priority rules to decide which to keep
                 if duplicate_with and self._should_replace(article, duplicate_with):
                     kept.remove(duplicate_with)
@@ -254,9 +262,19 @@ class Deduplicator:
             new_date = new.get('published_date')
             existing_date = existing.get('published_date')
             if new_date and existing_date:
-                if new_date < existing_date:
+                if isinstance(new_date, str):
+                    try:
+                        new_date = datetime.fromisoformat(new_date)
+                    except:
+                        pass
+                if isinstance(existing_date, str):
+                    try:
+                        existing_date = datetime.fromisoformat(existing_date)
+                    except:
+                        pass
+                if new_date and existing_date and new_date < existing_date:
                     return True
-                elif existing_date < new_date:
+                elif existing_date and new_date and existing_date < new_date:
                     return False
         
         # Prefer higher reliability
@@ -302,15 +320,7 @@ class Deduplicator:
         self.conn.commit()
     
     def deduplicate(self, articles: List[Dict]) -> Tuple[List[Dict], Dict]:
-        """
-        Main deduplication entry point
-        
-        Args:
-            articles: List of article dictionaries
-            
-        Returns:
-            Tuple of (deduplicated_articles, statistics)
-        """
+        """Main deduplication entry point"""
         print(f"   Starting deduplication with {len(articles)} articles...")
         
         # Reset stats
@@ -332,7 +342,7 @@ class Deduplicator:
             if is_dup:
                 self.stats['duplicates_removed'] += 1
                 self.stats['by_layer']['history'] += 1
-                if len(self.stats['removed_items']) < 20:  # Limit for performance
+                if len(self.stats['removed_items']) < 20:
                     self.stats['removed_items'].append({
                         'title': article.get('title', 'Unknown')[:50],
                         'url': article.get('link', ''),
