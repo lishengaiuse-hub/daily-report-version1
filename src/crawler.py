@@ -4,14 +4,16 @@
 Multi-method web crawler supporting RSS, HTTP, and optional Firecrawl/Playwright
 """
 
+import re  # ← 关键修复
 import feedparser
 import requests
 import time
 import hashlib
 from datetime import datetime
 from typing import List, Dict, Optional, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+
 
 class ArticleFetcher:
     """Fetch articles from multiple source types"""
@@ -49,7 +51,10 @@ class ArticleFetcher:
     def fetch_webpage(self, source_config: Dict) -> List[Dict]:
         """Fetch articles from HTML webpage using CSS selectors"""
         articles = []
-        url = source_config['url']
+        url = source_config.get('url', '')
+        
+        if not url:
+            return articles
         
         try:
             response = self.session.get(url, timeout=20)
@@ -59,8 +64,8 @@ class ArticleFetcher:
             items = soup.select(container)[:source_config.get('limit', 10)]
             
             for item in items:
-                title_elem = item.select_one(source_config['title_selector'])
-                link_elem = item.select_one(source_config['link_selector'])
+                title_elem = item.select_one(source_config.get('title_selector', ''))
+                link_elem = item.select_one(source_config.get('link_selector', ''))
                 
                 if not title_elem or not link_elem:
                     continue
@@ -68,15 +73,16 @@ class ArticleFetcher:
                 article = {
                     'title': self._clean_text(title_elem.get_text(strip=True)),
                     'summary': '',  # Will be filled from content or left as title
-                    'link': self._make_absolute_url(url, link_elem.get('href')),
+                    'link': urljoin(url, link_elem.get('href', '')),
                     'published_raw': '',
                     'source': urlparse(url).netloc,
                     'fetch_method': 'webpage'
                 }
                 
                 # Extract date if selector provided
-                if source_config.get('date_selector'):
-                    date_elem = item.select_one(source_config['date_selector'])
+                date_selector = source_config.get('date_selector')
+                if date_selector:
+                    date_elem = item.select_one(date_selector)
                     if date_elem:
                         article['published_raw'] = self._clean_text(date_elem.get_text(strip=True))
                 
@@ -91,7 +97,10 @@ class ArticleFetcher:
     def fetch_api(self, source_config: Dict) -> List[Dict]:
         """Fetch from REST API endpoint"""
         articles = []
-        url = source_config['url']
+        url = source_config.get('url', '')
+        
+        if not url:
+            return articles
         
         try:
             method = source_config.get('method', 'GET')
@@ -132,16 +141,11 @@ class ArticleFetcher:
         """Clean HTML and normalize text"""
         if not text:
             return ""
-        # Remove HTML tags
+        # Remove HTML tags using re (now available)
         text = re.sub(r'<.*?>', '', text)
         # Normalize whitespace
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
-    
-    def _make_absolute_url(self, base: str, relative: str) -> str:
-        """Convert relative URL to absolute"""
-        from urllib.parse import urljoin
-        return urljoin(base, relative)
     
     def _extract_field(self, item: Dict, possible_names: List[str]) -> str:
         """Extract field from dict by trying multiple possible names"""
@@ -160,7 +164,8 @@ class ArticleFetcher:
         
         # RSS Feeds (priority 1)
         print("📡 Fetching RSS feeds...")
-        for category, urls in sources.get('rss', {}).items():
+        rss_sources = sources.get('rss', {})
+        for category, urls in rss_sources.items():
             for url in urls:
                 print(f"  📰 RSS: {url[:60]}...")
                 articles = self.fetch_rss(url)
@@ -169,16 +174,18 @@ class ArticleFetcher:
         
         # Web Scraping (priority 2)
         print("🕸️  Fetching web pages...")
-        for name, config in sources.get('web_scraping', {}).items():
-            print(f"  🌐 {name}: {config['url'][:60]}...")
+        web_sources = sources.get('web_scraping', {})
+        for name, config in web_sources.items():
+            print(f"  🌐 {name}: {config.get('url', '')[:60]}...")
             articles = self.fetch_webpage(config)
             all_articles.extend(articles)
             time.sleep(1)
         
         # API Sources (priority 3)
         print("🔌 Fetching APIs...")
-        for name, config in sources.get('api', {}).items():
-            print(f"  📡 {name}: {config['url'][:60]}...")
+        api_sources = sources.get('api', {})
+        for name, config in api_sources.items():
+            print(f"  📡 {name}: {config.get('url', '')[:60]}...")
             articles = self.fetch_api(config)
             all_articles.extend(articles)
             time.sleep(0.5)
