@@ -3,7 +3,7 @@
 """
 Samsung CE Intelligence System - Main Orchestrator
 Coordinates all modules for daily intelligence briefing
-Version: 3.0 - Includes Topic Coverage Guarantee and Active Search
+Version: 3.1 - Fixed datetime timezone compatibility
 """
 
 import os
@@ -159,10 +159,18 @@ class SamsungIntelligenceSystem:
             }
         }
     
+    def _make_naive(self, dt: Optional[datetime]) -> Optional[datetime]:
+        """Convert datetime to naive (remove timezone info)"""
+        if dt is None:
+            return None
+        if dt.tzinfo is not None:
+            return dt.replace(tzinfo=None)
+        return dt
+    
     def run(self, dry_run: bool = False) -> Dict:
         """Run the complete intelligence pipeline with topic coverage guarantee"""
         print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v3.0")
+        print("🔵 Samsung CE Intelligence System v3.1")
         print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"📍 Timezone: Singapore (UTC+8)")
         print("=" * 70)
@@ -238,8 +246,14 @@ class SamsungIntelligenceSystem:
                         published_raw = new_article.get('published_raw', '')
                         published_date = parser.parse_date(published_raw) if published_raw else None
                         
-                        if published_date and (datetime.now() - published_date).days > 3:
-                            continue  # Skip older than 3 days
+                        # Fix: Handle timezone compatibility
+                        if published_date:
+                            # Convert to naive datetime for comparison
+                            published_date = self._make_naive(published_date)
+                            now = datetime.now()
+                            # Check if older than 3 days
+                            if (now - published_date).days > 3:
+                                continue
                         
                         # Classify (ensure it gets the target topic)
                         topics = classifier.classify(
@@ -501,7 +515,7 @@ class SamsungIntelligenceSystem:
                     </ol>
                 </div>
                 <div class="footer">
-                    <p>Samsung CE Intelligence System v3.0</p>
+                    <p>Samsung CE Intelligence System v3.1</p>
                 </div>
             </div>
         </body>
@@ -512,7 +526,7 @@ class SamsungIntelligenceSystem:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v3.0")
+    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v3.1")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
     parser.add_argument("--test-email", action="store_true", help="Test email configuration only")
     parser.add_argument("--config", default="config/config.yaml", help="Config file path")
