@@ -9,7 +9,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import List, Optional
+from typing import List, Optional, Dict  # ← 添加这行导入
 from datetime import datetime
 
 class EmailSender:
@@ -98,16 +98,16 @@ class EmailSender:
     
     def send_test_email(self) -> bool:
         """Send a test email to verify configuration"""
-        test_html = """
+        test_html = f"""
         <html>
         <body>
             <h1>Samsung CE Intelligence - Test Email</h1>
             <p>This is a test email to verify SMTP configuration.</p>
-            <p>Time: {time}</p>
+            <p>Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
             <hr>
             <p>If you received this, email configuration is working correctly.</p>
         </body>
         </html>
-        """.format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        """
         
         return self.send(test_html, "TEST")
