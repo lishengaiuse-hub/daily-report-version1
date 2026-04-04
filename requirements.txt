@@ -1,0 +1,35 @@
+# Core
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# RSS
+feedparser==6.0.10
+
+# Deduplication (Core)
+rapidfuzz==3.5.2
+sentence-transformers==2.2.2
+numpy==1.24.3
+
+# Configuration
+pyyaml==6.0.1
+
+# Email
+secure-smtplib==0.1.1
+
+# Date parsing
+python-dateutil==2.8.2
+
+# Optional: LLM summarization
+openai==0.28.1
+
+# Data storage
+sqlite3  # Built-in
+
+# Testing
+pytest==7.4.0
+pytest-cov==4.1.0
+
+# Optional: Advanced scraping
+# playwright==1.40.0
+# firecrawl-py==0.0.1
