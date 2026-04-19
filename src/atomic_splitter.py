@@ -21,6 +21,7 @@ class AtomicSplitter:
         r'•\s*',              # 项目符号
         r'\n\s*\n',           # 双换行
         r'【(.+?)】',          # 【标题】
+        r'\d+[\)）]\s*',      # 1) 2) 格式
     ]
     
     # 聚合新闻标题模式
@@ -29,6 +30,7 @@ class AtomicSplitter:
         r'8点1氪|36氪|晚报|合集|汇总',
         r'今日快讯|新闻简报|一句话新闻',
         r'morning brief|daily brief|news digest',
+        r'快讯|速递|要闻',
     ]
     
     def __init__(self):
@@ -98,7 +100,7 @@ class AtomicSplitter:
                 'published_raw': article.get('published_raw', ''),
                 'published_date': article.get('published_date'),
                 'fetch_method': article.get('fetch_method', 'atomic_split'),
-                'parent_link': article.get('link', ''),  # 记录原始聚合页链接
+                'parent_link': article.get('link', ''),
                 'is_atomic': True
             }
             atomic_articles.append(atomic_article)
