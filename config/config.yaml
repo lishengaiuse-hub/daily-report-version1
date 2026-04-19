@@ -32,6 +32,8 @@ sources:
         label: "T1-竞品-芯片-EN"
       - query: "oppo vivo honor samsung display panel launch"
         label: "T1-竞品-显示-EN"
+      - query: "huawei oppo vivo foldable phone flagship release"
+        label: "T1-竞品-折叠-EN"
       # T2 — Technology / Materials
       - query: "MicroLED MiniLED OLED display technology breakthrough"
         label: "T2-显示技术-EN"
@@ -43,6 +45,8 @@ sources:
         label: "T2-材料-EN"
       - query: "on-device AI NPU edge inference chip"
         label: "T2-AI芯片-EN"
+      - query: "DRAM HBM memory chip Samsung SK Hynix Micron"
+        label: "T2-内存芯片-EN"
       # T3 — Manufacturing SEA/India
       - query: "vietnam india thailand factory electronics manufacturing investment"
         label: "T3-SEA制造-EN"
@@ -50,9 +54,24 @@ sources:
         label: "T3-供应商-EN"
       - query: "electronics manufacturing indonesia malaysia investment capacity"
         label: "T3-东南亚-EN"
-      # T4 — Exhibitions
-      - query: "CES IFA MWC AWE 2025 consumer electronics show"
+      - query: "india electronics factory samsung apple investment 2025"
+        label: "T3-印度制造-EN"
+      - query: "supply chain electronics component shortage tariff 2025"
+        label: "T3-供应链-EN"
+      # T4 — Exhibitions (4 separate queries for broader coverage)
+      - query: "CES 2025 2026 consumer electronics show Las Vegas"
+        label: "T4-CES-EN"
+      - query: "MWC Mobile World Congress Barcelona 2025"
+        label: "T4-MWC-EN"
+      - query: "IFA Berlin AWE appliance exhibition 2025"
+        label: "T4-IFA-AWE-EN"
+      - query: "Display Week SID Computex electronics trade show 2025"
         label: "T4-展会-EN"
+      # Market research / Japan
+      - query: "smartphone market share shipment IDC 2025 forecast"
+        label: "T1-市场份额-EN"
+      - query: "japan electronics sony panasonic sharp nikkei 2025"
+        label: "T2-日本-EN"
     zh:
       # T1 — 竞品动态
       - query: "小米华为OPPO vivo手机发布上市2025"
@@ -61,20 +80,31 @@ sources:
         label: "T1-竞品-家电-ZH"
       - query: "苹果华为芯片处理器发布"
         label: "T1-竞品-芯片-ZH"
+      - query: "荣耀小米折叠屏手机发布旗舰"
+        label: "T1-竞品-折叠-ZH"
       # T2 — 新技术材料
       - query: "MicroLED MiniLED OLED显示技术突破"
         label: "T2-显示-ZH"
-      - query: "半导体晶圆制程芯片"
+      - query: "半导体晶圆制程芯片台积电"
         label: "T2-半导体-ZH"
       - query: "固态电池材料氮化镓石墨烯"
         label: "T2-材料-ZH"
+      - query: "HBM存储芯片三星海力士美光"
+        label: "T2-内存-ZH"
       # T3 — 制造
       - query: "越南印度工厂电子制造投资扩产"
         label: "T3-SEA-ZH"
       - query: "三星苹果富士康供应商越南印度建厂"
         label: "T3-供应商-ZH"
+      - query: "印度电子制造苹果三星工厂投资2025"
+        label: "T3-印度-ZH"
+      # T4 — 展会
+      - query: "CES IFA MWC展会消费电子2025"
+        label: "T4-展会-ZH"
 
   # ========== RSS FEEDS (Priority 1) ==========
+  # Note: Only sources verified to work from GitHub Actions CI are kept.
+  # Sources with consistent DNS failures or IP blocks have been removed.
   rss:
     # 显示技术 / Display Technology
     display:
@@ -82,8 +112,8 @@ sources:
       - "https://www.microled-info.com/rss.xml"
       - "https://www.displaydaily.com/rss"
       - "https://www.ledinside.cn/rss.xml"
-      - "https://www.displaysupplychain.com/feed"
-    
+      # displaysupplychain.com removed — consistently fails in CI
+
     # 半导体 / Semiconductor
     semiconductor:
       - "https://semiengineering.com/feed/"
@@ -91,112 +121,93 @@ sources:
       - "https://www.eetimes.com/feed/"
       - "https://www.electronicsweekly.com/feed/"
       - "https://www.semiconductor-digest.com/feed/"
-      - "https://www.semiconductor-today.com/rss/"
-      - "https://www.evertiq.com/rss"
-    
+      - "https://www.electronicdesign.com/rss.xml"
+      # semiconductor-today.com and evertiq.com removed — consistently fail in CI
+
     # 消费电子 / Consumer Electronics
     consumer_electronics:
       - "https://www.theverge.com/rss/index.xml"
       - "https://techcrunch.com/feed/"
       - "https://www.engadget.com/rss.xml"
       - "https://www.cnet.com/rss/news/"
-      - "https://www.gsmarena.com/rss-news-reviews.php"
       - "https://www.phonearena.com/feed"
       - "https://9to5google.com/feed/"
       - "https://9to5mac.com/feed/"
       - "https://www.androidpolice.com/feed/"
-    
+      # gsmarena.com removed — blocked by CI IP
+
     # 中文科技媒体 / Chinese Tech Media
     chinese_tech:
       - "https://www.ithome.com/rss/"
       - "https://www.36kr.com/feed"
       - "https://www.leiphone.com/feed"
-      - "https://www.pingwest.com/feed"
-      - "https://www.cnbeta.com/backend.php"
       - "https://technews.tw/feed/"
-      - "https://www.eechina.com/rss.xml"
-      - "https://www.eet-china.com/feed"
-      - "https://www.esmchina.com/rss"
       - "https://www.eepw.com.cn/rss"
-    
+      # Removed: pingwest, cnbeta (DNS fails), eechina, eet-china, esmchina (timeouts)
+
     # 东南亚制造 / SEA Manufacturing
     sea_manufacturing:
-      - "https://www.vietnam-briefing.com/news/feed/"
-      - "https://thailand-briefing.com/news/feed/"
-      - "https://www.thestar.com.my/rss/business"
-      - "https://www.businesstimes.com.sg/rss"
-      - "https://www.bangkokpost.com/rss/business"
-      - "https://e.vnexpress.net/rss/business"
-      - "https://www.thelec.net/rss"
-      - "https://www.msia.org.my/news_updates/feed/"
-    
-    # 印度制造 / India Manufacturing
+      - "https://www.businesstimes.com.sg/rss.xml"
+      - "https://www.channelnewsasia.com/rss/8395858"
+      - "https://www.thelec.net/feed"
+      # Removed: vietnam-briefing (fails), thailand-briefing (DNS), thestar.my,
+      # bangkokpost (premature end), vnexpress (fails), msia.org.my (fails)
+
+    # 印度制造 / India Manufacturing  (replaced with working feeds)
     india_manufacturing:
-      - "https://economictimes.indiatimes.com/rssfeeds/13352311.cms"
-      - "https://www.business-standard.com/rss/manufacturing.rss"
-      - "https://www.livemint.com/rss/manufacturing"
-      - "https://www.electronicsb2b.com/feed/"
-    
+      - "https://www.moneycontrol.com/rss/economy.xml"
+      - "https://economictimes.indiatimes.com/rssfeeds/1977021501.cms"
+      # Original 4 sources all fail from CI — replaced with working alternatives
+
     # 供应链 / Supply Chain
     supply_chain:
-      - "https://www.supplychainbrain.com/rss"
-      - "https://www.scmr.com/rss"
-      - "https://www.ebnonline.com/feed/"
-      - "https://www.globalsmt.net/rss"
-      - "https://www.electronicdesign.com/feed"
-    
+      - "https://www.electronicdesign.com/rss.xml"
+      - "https://supplychaindigital.com/rss.xml"
+      # supplychainbrain, scmr, ebnonline, globalsmt all fail — removed
+
     # 新材料 / Materials & Battery
     materials_battery:
-      - "https://www.materialstoday.com/rss-feed"
-      - "https://www.chemistryworld.com/rss"
-      - "https://www.electrochem.org/news/feed"
-      - "https://www.azom.com/rss.aspx"
-      - "https://www.compositesworld.com/rss"
+      - "https://www.electrochem.org/feed"
       - "https://www.advancedsciencenews.com/feed/"
-    
+      - "https://www.electropages.com/feed"
+      # materialstoday (connection refused), chemistryworld, azom, compositesworld removed
+
     # 机器人/智能家居 / Robotics & Smart Home
     robotics_smart_home:
       - "https://www.vacuumwars.com/feed/"
       - "https://roboticsbiz.com/feed/"
-      - "https://www.therobotreport.com/feed/"
-    
+
     # AR/VR/可穿戴 / AR/VR/Wearable
     ar_vr_wearable:
-      - "https://www.microled-info.com/tag/ar/feed"
+      - "https://www.microled-info.com/rss.xml"
       - "https://www.roadtovr.com/feed/"
       - "https://www.uploadvr.com/feed/"
-    
+
     # 展会信息 / Exhibitions
-    exhibitions:
-      - "https://www.ces.tech/rss.aspx"
-      - "https://www.ifa-berlin.com/en/rss"
-      - "https://www.mwcbarcelona.com/rss"
-      - "https://www.displayweek.org/rss"
-    
+    # Official exhibition RSS feeds all fail from CI — covered by Google News RSS instead
+    exhibitions: []
+
     # 市场研究 / Market Research
     market_research:
-      - "https://www.trendforce.com/rss/"
-      - "https://www.counterpointresearch.com/feed/"
-      - "https://www.idc.com/rss"
-      - "https://www.gartner.com/rss"
-      - "https://www.omdia.com/rss"
-    
+      - "https://www.trendforce.com/news/feed"
+      - "https://www.idc.com/feed"
+      # counterpointresearch feed, gartner, omdia all fail — removed
+
     # 三星官方 / Samsung Official
     samsung_official:
       - "https://news.samsung.com/global/rss"
-      - "https://developer.samsung.com/rss"
-    
-    # 元器件供应商 / Component Suppliers
+      - "https://developer.samsung.com/feed"
+
+    # 元器件供应商 / Component Suppliers (replaced with working feeds)
     component_suppliers:
-      - "https://www.murata.com/en-us/newsroom/feed"
-      - "https://www.tdk.com/en/news_center/feed"
-      - "https://news.kyocera.com/rss"
-      - "https://www.rohm.com/news"
-    
+      - "https://www.electronicproducts.com/rss.xml"
+      - "https://www.electronicdesign.com/rss.xml"
+      # murata, tdk, kyocera (DNS), rohm all fail from CI — replaced
+
     # 日本产业新闻 / Japan Industry
     japan_industry:
       - "https://www.japanindustrynews.com/feed/"
-      - "https://asia.nikkei.com/rss"
+      # asia.nikkei.com removed — consistently fails from CI
   
   # ========== WEB SCRAPING (Priority 2) ==========
   web_scraping:
@@ -263,23 +274,11 @@ sources:
       date_selector: ".time"
       limit: 15
     
-    # IT桔子
-    itjuzi:
-      url: "https://www.itjuzi.com/news"
-      container: ".news-item"
-      title_selector: ".title a"
-      link_selector: ".title a"
-      date_selector: ".time"
-      limit: 10
-    
-    # 老杳吧
-    laoyaoba:
-      url: "https://www.laoyaoba.com/html/news/"
-      container: ".news_list li"
-      title_selector: "a"
-      link_selector: "a"
-      date_selector: ".time"
-      limit: 10
+    # IT桔子 — disabled: 412 Precondition Failed from CI
+    # itjuzi: disabled
+
+    # 老杳吧 — disabled: 500 Server Error from CI
+    # laoyaoba: disabled
   
   # ========== FIRECRAWL SOURCES (Priority 2.5 - Dynamic JavaScript sites) ==========
   firecrawl:
@@ -460,7 +459,7 @@ sources:
       params:
         per_page: 15
         _embed: true
-      disabled: false
+      disabled: true   # returns empty response from CI — covered by Google News RSS
 
     trendforce:
       url: "https://www.trendforce.com/api/news"
