@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
+from typing import List, Dict, Optional, Any, Tuple
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -75,171 +76,6 @@ class SamsungIntelligenceSystem:
             return dt.replace(tzinfo=None)
         return dt
     
-    def run(self, dry_run: bool = False) -> Dict:
-        """Run the complete intelligence pipeline"""
-        print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v4.0")
-        print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 70)
-        
-        try:
-            # =============================================
-            # Step 1: 抓取
-            # =============================================
-            print("\n📡 Step 1: Fetching articles...")
-            articles = self.fetcher.fetch_all(self.config.get('sources', {}))
-            print(f"   ✅ Fetched {len(articles)} raw articles")
-            
-            if not articles:
-                print("   ⚠️ No articles fetched. Check your sources.")
-                return {'articles': [], 'stats': {}, 'report': None}
-            
-            # =============================================
-            # Step 2: 解析
-            # =============================================
-            print("\n📝 Step 2: Parsing articles...")
-            parsed_articles = self.parser.parse_batch(articles, days_back=3)
-            print(f"   ✅ Parsed {len(parsed_articles)} articles (filtered for recent days)")
-            
-            if not parsed_articles:
-                print("   ⚠️ No articles after parsing.")
-                return {'articles': [], 'stats': {}, 'report': None}
-            
-            # =============================================
-            # Step 3: 原子化拆分 (新增)
-            # =============================================
-            print("\n🔪 Step 3: Atomic splitting (聚合新闻拆分)...")
-            atomic_articles = self.splitter.split_batch(parsed_articles)
-            print(f"   ✅ After split: {len(atomic_articles)} atomic articles")
-            
-            # =============================================
-            # Step 4: 原始来源追溯 (新增)
-            # =============================================
-            print("\n🔗 Step 4: Origin tracking...")
-            traced_articles = self.tracker.trace_batch(atomic_articles)
-            
-            # =============================================
-            # Step 5: 严格分类
-            # =============================================
-            print("\n🏷️ Step 5: Strict classification...")
-            for article in traced_articles:
-                article['topics'] = self.classifier.classify(
-                    article.get('title', ''),
-                    article.get('summary', '')
-                )
-                article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
-            
-            # 按Topic分组
-            articles_by_topic = defaultdict(list)
-            for article in traced_articles:
-                for topic_id in article.get('topics', []):
-                    if 1 <= topic_id <= 5:
-                        articles_by_topic[topic_id].append(article)
-            
-            # 打印分布
-            print("   📊 Initial topic distribution:")
-            for tid in range(1, 6):
-                print(f"      Topic {tid}: {len(articles_by_topic[tid])} articles")
-            
-            self.classifier.print_stats()
-            
-            # =============================================
-            # Step 6: 跨栏目去重 (新增)
-            # =============================================
-            print("\n🔄 Step 6: Cross-topic deduplication...")
-            articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
-            
-            # 展平
-            deduped_articles = []
-            for articles in articles_by_topic.values():
-                deduped_articles.extend(articles)
-            
-            print(f"   ✅ After cross-topic dedup: {len(deduped_articles)} unique articles")
-            
-            # =============================================
-            # Step 7: 标准去重 (URL + Title)
-            # =============================================
-            print("\n🔍 Step 7: Standard deduplication (URL + Title)...")
-            final_articles, dedup_stats = self.deduplicator.deduplicate(deduped_articles)
-            print(f"   ✅ Before: {dedup_stats['total_before']} → After: {dedup_stats['total_after']}")
-            print(f"   🗑️ Removed: {dedup_stats['duplicates_removed']} duplicates")
-            
-            # =============================================
-            # Step 8: AI摘要
-            # =============================================
-            print("\n✍️ Step 8: Generating AI summaries...")
-            for article in final_articles[:50]:
-                if len(article.get('summary', '')) < 100:
-                    article['summary'] = self.summarizer.summarize(
-                        article.get('title', ''), 
-                        article.get('content', article.get('summary', ''))
-                    )
-            print(f"   ✅ Summarized {min(50, len(final_articles))} articles")
-            
-            # =============================================
-            # Step 9: 生成报告
-            # =============================================
-            print("\n📊 Step 9: Generating report...")
-            
-            # 最终统计
-            final_counts = defaultdict(int)
-            for article in final_articles:
-                for t in article.get('topics', []):
-                    final_counts[t] += 1
-            
-            print("   📊 Final topic distribution:")
-            for tid in range(1, 6):
-                print(f"      Topic {tid}: {final_counts[tid]} articles")
-            
-            report_html = self.reporter.generate_html(final_articles, dedup_stats)
-            
-            # 保存报告
-            output_dir = self.base_dir / "output"
-            output_dir.mkdir(exist_ok=True)
-            date_str = datetime.now().strftime('%Y%m%d')
-            html_path = output_dir / f"report_{date_str}.html"
-            
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(report_html)
-            
-            print(f"   ✅ Report saved: {html_path}")
-            
-            # =============================================
-            # Step 10: 发送邮件
-            # =============================================
-            if not dry_run:
-                print("\n📧 Step 10: Sending email...")
-                print(f"   SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT SET')}")
-                print(f"   RECEIVER_EMAIL: {os.getenv('RECEIVER_EMAIL', 'NOT SET')}")
-                print(f"   SENDER_PASSWORD: {'✅ SET' if os.getenv('SENDER_PASSWORD') else '❌ NOT SET'}")
-                
-                success = self.mailer.send(report_html, date_str)
-                if success:
-                    print("   ✅ Email sent successfully!")
-                else:
-                    print("   ❌ Failed to send email")
-            else:
-                print("\n📧 Step 10: Skipping email (dry run mode)")
-            
-            # =============================================
-            # 清理和总结
-            # =============================================
-            self.deduplicator.close()
-            
-            elapsed = (datetime.now() - self.start_time).total_seconds()
-            print("\n" + "=" * 70)
-            print(f"✅ System completed successfully in {elapsed:.1f} seconds")
-            print("=" * 70)
-            print("\n" + self.deduplicator.get_deduplication_report())
-            
-            return {'articles': final_articles, 'stats': dedup_stats}
-            
-        except Exception as e:
-            print(f"\n❌ System failed with error: {e}")
-            import traceback
-            traceback.print_exc()
-            return {'error': str(e)}
-    
     def _get_reliability_score(self, source: str) -> float:
         """Get reliability score based on source domain"""
         high_domains = [
@@ -268,6 +104,149 @@ class SamsungIntelligenceSystem:
                 return 0.60
         
         return 0.70
+    
+    def run(self, dry_run: bool = False) -> Dict:
+        """Run the complete intelligence pipeline"""
+        print("=" * 70)
+        print("🔵 Samsung CE Intelligence System v4.0")
+        print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 70)
+        
+        try:
+            # Step 1: 抓取
+            print("\n📡 Step 1: Fetching articles...")
+            articles = self.fetcher.fetch_all(self.config.get('sources', {}))
+            print(f"   ✅ Fetched {len(articles)} raw articles")
+            
+            if not articles:
+                print("   ⚠️ No articles fetched. Check your sources.")
+                return {'articles': [], 'stats': {}, 'report': None}
+            
+            # Step 2: 解析
+            print("\n📝 Step 2: Parsing articles...")
+            parsed_articles = self.parser.parse_batch(articles, days_back=3)
+            print(f"   ✅ Parsed {len(parsed_articles)} articles (filtered for recent days)")
+            
+            if not parsed_articles:
+                print("   ⚠️ No articles after parsing.")
+                return {'articles': [], 'stats': {}, 'report': None}
+            
+            # Step 3: 原子化拆分
+            print("\n🔪 Step 3: Atomic splitting (聚合新闻拆分)...")
+            atomic_articles = self.splitter.split_batch(parsed_articles)
+            print(f"   ✅ After split: {len(atomic_articles)} atomic articles")
+            
+            # Step 4: 原始来源追溯
+            print("\n🔗 Step 4: Origin tracking...")
+            traced_articles = self.tracker.trace_batch(atomic_articles)
+            
+            # Step 5: 严格分类
+            print("\n🏷️ Step 5: Strict classification...")
+            for article in traced_articles:
+                article['topics'] = self.classifier.classify(
+                    article.get('title', ''),
+                    article.get('summary', '')
+                )
+                article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
+            
+            # 按Topic分组
+            articles_by_topic = defaultdict(list)
+            for article in traced_articles:
+                for topic_id in article.get('topics', []):
+                    if 1 <= topic_id <= 5:
+                        articles_by_topic[topic_id].append(article)
+            
+            # 打印分布
+            print("   📊 Initial topic distribution:")
+            for tid in range(1, 6):
+                print(f"      Topic {tid}: {len(articles_by_topic[tid])} articles")
+            
+            self.classifier.print_stats()
+            
+            # Step 6: 跨栏目去重
+            print("\n🔄 Step 6: Cross-topic deduplication...")
+            articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
+            
+            # 展平
+            deduped_articles = []
+            for articles in articles_by_topic.values():
+                deduped_articles.extend(articles)
+            
+            print(f"   ✅ After cross-topic dedup: {len(deduped_articles)} unique articles")
+            
+            # Step 7: 标准去重 (URL + Title)
+            print("\n🔍 Step 7: Standard deduplication (URL + Title)...")
+            final_articles, dedup_stats = self.deduplicator.deduplicate(deduped_articles)
+            print(f"   ✅ Before: {dedup_stats['total_before']} → After: {dedup_stats['total_after']}")
+            print(f"   🗑️ Removed: {dedup_stats['duplicates_removed']} duplicates")
+            
+            # Step 8: AI摘要
+            print("\n✍️ Step 8: Generating AI summaries...")
+            for article in final_articles[:50]:
+                if len(article.get('summary', '')) < 100:
+                    article['summary'] = self.summarizer.summarize(
+                        article.get('title', ''), 
+                        article.get('content', article.get('summary', ''))
+                    )
+            print(f"   ✅ Summarized {min(50, len(final_articles))} articles")
+            
+            # Step 9: 生成报告
+            print("\n📊 Step 9: Generating report...")
+            
+            # 最终统计
+            final_counts = defaultdict(int)
+            for article in final_articles:
+                for t in article.get('topics', []):
+                    final_counts[t] += 1
+            
+            print("   📊 Final topic distribution:")
+            for tid in range(1, 6):
+                print(f"      Topic {tid}: {final_counts[tid]} articles")
+            
+            report_html = self.reporter.generate_html(final_articles, dedup_stats)
+            
+            # 保存报告
+            output_dir = self.base_dir / "output"
+            output_dir.mkdir(exist_ok=True)
+            date_str = datetime.now().strftime('%Y%m%d')
+            html_path = output_dir / f"report_{date_str}.html"
+            
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(report_html)
+            
+            print(f"   ✅ Report saved: {html_path}")
+            
+            # Step 10: 发送邮件
+            if not dry_run:
+                print("\n📧 Step 10: Sending email...")
+                print(f"   SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT SET')}")
+                print(f"   RECEIVER_EMAIL: {os.getenv('RECEIVER_EMAIL', 'NOT SET')}")
+                print(f"   SENDER_PASSWORD: {'✅ SET' if os.getenv('SENDER_PASSWORD') else '❌ NOT SET'}")
+                
+                success = self.mailer.send(report_html, date_str)
+                if success:
+                    print("   ✅ Email sent successfully!")
+                else:
+                    print("   ❌ Failed to send email")
+            else:
+                print("\n📧 Step 10: Skipping email (dry run mode)")
+            
+            # 清理和总结
+            self.deduplicator.close()
+            
+            elapsed = (datetime.now() - self.start_time).total_seconds()
+            print("\n" + "=" * 70)
+            print(f"✅ System completed successfully in {elapsed:.1f} seconds")
+            print("=" * 70)
+            print("\n" + self.deduplicator.get_deduplication_report())
+            
+            return {'articles': final_articles, 'stats': dedup_stats}
+            
+        except Exception as e:
+            print(f"\n❌ System failed with error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'error': str(e)}
 
 
 if __name__ == "__main__":
