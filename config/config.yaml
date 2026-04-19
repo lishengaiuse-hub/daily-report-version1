@@ -1,8 +1,8 @@
 # =====================================================
 # Samsung CE Intelligence System - Complete Configuration
-# Version: 3.0
-# Updated: 2026-04-04
-# Includes: RSS, Web Scraping, Firecrawl, API sources
+# Version: 3.1
+# Updated: 2026-04-19
+# Includes: Google News RSS (primary), RSS, Web Scraping, Firecrawl, API sources
 # =====================================================
 
 system:
@@ -18,6 +18,62 @@ system:
 # =====================================================
 
 sources:
+  # ========== GOOGLE NEWS RSS (Priority 0 — always reachable from CI) ==========
+  # These run BEFORE individual RSS feeds and reliably capture fresh news.
+  # Format: query (English) + query_zh (Chinese), up to 20 results each.
+  google_news_rss:
+    en:
+      # T1 — Competitor dynamics
+      - query: "apple xiaomi huawei smartphone launch release 2025"
+        label: "T1-竞品-手机-EN"
+      - query: "LG sony TCL hisense TV OLED launch price"
+        label: "T1-竞品-家电-EN"
+      - query: "apple xiaomi qualcomm snapdragon chip processor release"
+        label: "T1-竞品-芯片-EN"
+      - query: "oppo vivo honor samsung display panel launch"
+        label: "T1-竞品-显示-EN"
+      # T2 — Technology / Materials
+      - query: "MicroLED MiniLED OLED display technology breakthrough"
+        label: "T2-显示技术-EN"
+      - query: "semiconductor wafer foundry TSMC process node"
+        label: "T2-半导体-EN"
+      - query: "solid state battery silicon anode energy density"
+        label: "T2-电池-EN"
+      - query: "GaN graphene perovskite material electronics"
+        label: "T2-材料-EN"
+      - query: "on-device AI NPU edge inference chip"
+        label: "T2-AI芯片-EN"
+      # T3 — Manufacturing SEA/India
+      - query: "vietnam india thailand factory electronics manufacturing investment"
+        label: "T3-SEA制造-EN"
+      - query: "apple foxconn samsung supplier vietnam india factory expand"
+        label: "T3-供应商-EN"
+      - query: "electronics manufacturing indonesia malaysia investment capacity"
+        label: "T3-东南亚-EN"
+      # T4 — Exhibitions
+      - query: "CES IFA MWC AWE 2025 consumer electronics show"
+        label: "T4-展会-EN"
+    zh:
+      # T1 — 竞品动态
+      - query: "小米华为OPPO vivo手机发布上市2025"
+        label: "T1-竞品-手机-ZH"
+      - query: "海信TCL格力美的电视家电发布价格"
+        label: "T1-竞品-家电-ZH"
+      - query: "苹果华为芯片处理器发布"
+        label: "T1-竞品-芯片-ZH"
+      # T2 — 新技术材料
+      - query: "MicroLED MiniLED OLED显示技术突破"
+        label: "T2-显示-ZH"
+      - query: "半导体晶圆制程芯片"
+        label: "T2-半导体-ZH"
+      - query: "固态电池材料氮化镓石墨烯"
+        label: "T2-材料-ZH"
+      # T3 — 制造
+      - query: "越南印度工厂电子制造投资扩产"
+        label: "T3-SEA-ZH"
+      - query: "三星苹果富士康供应商越南印度建厂"
+        label: "T3-供应商-ZH"
+
   # ========== RSS FEEDS (Priority 1) ==========
   rss:
     # 显示技术 / Display Technology
@@ -396,26 +452,23 @@ sources:
       limit: 10
   
   # ========== API SOURCES (Priority 3) ==========
+  # Note: trendforce and displaydaily custom API endpoints do not exist (404).
+  # counterpoint WP JSON is kept as it follows standard WordPress REST API.
   api:
-    trendforce:
-      url: "https://www.trendforce.com/api/news"
-      method: "GET"
-      params:
-        limit: 20
-      headers:
-        User-Agent: "Mozilla/5.0"
-    
     counterpoint:
       url: "https://www.counterpointresearch.com/wp-json/wp/v2/posts"
       params:
         per_page: 15
         _embed: true
-    
+      disabled: false
+
+    trendforce:
+      url: "https://www.trendforce.com/api/news"
+      disabled: true   # endpoint does not exist
+
     display_daily:
       url: "https://www.displaydaily.com/api/news"
-      method: "GET"
-      params:
-        limit: 10
+      disabled: true   # endpoint does not exist
 
 # =====================================================
 # TOPIC CLASSIFICATION

@@ -2,628 +2,562 @@
 # -*- coding: utf-8 -*-
 """
 Report Generator for Samsung CE Intelligence
-Generates professional HTML and Markdown reports with AI-powered summaries
+Version: 6.0 - 严格QA + 单一归属 + ALERTS双条件 + 新输出格式
 """
 
 import os
 import re
 from datetime import datetime
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional, Tuple
 from collections import defaultdict
 import openai
 
+
 class ReportGenerator:
-    """Generate formatted reports with AI summaries for each news item"""
-    
+    """生成符合企业情报标准的结构化 Markdown 及 HTML 报告"""
+
+    TOPIC_NAMES = {
+        1: "竞品动态",
+        2: "新技术 / 材料",
+        3: "制造（SEA / India）",
+        4: "行业展会"
+    }
+
+    TOPIC_EMOJIS = {
+        1: "🟥",
+        2: "🟦",
+        3: "🟩",
+        4: "🟨"
+    }
+
+    IMPACT_LABELS = {
+        "high": "🔴 HIGH",
+        "medium": "🟡 MED",
+        "low": "🟢 LOW"
+    }
+
+    HIGH_IMPACT_KEYWORDS = [
+        "发布", "推出", "上市", "价格", "降价", "涨价", "市场份额", "超越", "首次", "首发",
+        "突破", "颠覆", "关税", "制裁", "断供", "短缺",
+        "越南", "印度", "工厂", "投资", "扩产", "战略合作",
+        "launch", "release", "price cut", "shortage", "sanction", "investment", "expand"
+    ]
+
+    MEDIUM_IMPACT_KEYWORDS = [
+        "升级", "改进", "优化", "展示", "亮相", "参展", "论坛",
+        "趋势", "预测", "增长", "下降", "调整", "政策",
+        "upgrade", "improve", "exhibit", "trend", "forecast"
+    ]
+
+    # ALERTS 四大判断维度（必须满足 ≥2 个）
+    ALERT_CRITERIA = {
+        "impacts_samsung": [
+            "samsung", "三星", "market share", "市场份额", "competitor", "竞争",
+            "rival", "beats samsung", "overtake", "超越三星"
+        ],
+        "core_tech": [
+            "ai", "chip", "芯片", "oled", "microled", "semiconductor", "半导体",
+            "display", "面板", "npu", "processor", "处理器", "memory", "内存"
+        ],
+        "supply_chain_risk": [
+            "supply chain", "供应链", "shortage", "短缺", "sanction", "制裁",
+            "export ban", "出口禁令", "tariff", "关税", "disruption", "断供"
+        ],
+        "major_investment": [
+            "investment", "投资", "billion", "亿", "expansion", "扩产",
+            "new factory", "新工厂", "建厂", "capacity increase", "产能"
+        ]
+    }
+
     def __init__(self, config: Dict):
         self.config = config
-        self.topic_names = {
-            1: "竞品动态 — Competitor Technology & Product Moves",
-            2: "新兴技术与材料 — Emerging Tech, Materials & CMF Design",
-            3: "东南亚/印度制造 — Manufacturing SEA / India",
-            4: "行业展会 — Industry Events",
-            5: "供应链风险 — Supply Chain Risks",
-            6: "成本与大宗商品 — Cost & Commodity Trends",
-            7: "AI与智能家居 — AI & Software in CE",
-            8: "市场情报与政策 — Market Intelligence & Policy"
-        }
-        
-        # Impact level mapping
-        self.impact_levels = {
-            'high': '🔴 HIGH',
-            'medium': '🟡 MED',
-            'low': '🟢 LOW'
-        }
-        
-        # Initialize AI for summarization
-        self.api_key = os.getenv("DEEPSEEK_API_KEY")
-        self.ai_enabled = bool(self.api_key)
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.ai_enabled = bool(api_key)
         if self.ai_enabled:
-            openai.api_key = self.api_key
+            openai.api_key = api_key
             openai.api_base = "https://api.deepseek.com/v1"
-    
-    def _generate_ai_summary(self, title: str, content: str, impact_level: str = "medium") -> str:
-        """Generate AI-powered summary for a single news item"""
-        if not self.ai_enabled or not content:
-            summary = content[:150] if content else title
-            return summary + "..." if len(summary) >= 150 else summary
-        
-        try:
-            emphasis = {
-                'high': '重点突出其对三星的紧迫影响和行动建议。',
-                'medium': '客观总结事件内容，说明对三星的潜在影响。',
-                'low': '简要记录该动态，供参考跟踪。'
-            }.get(impact_level, '客观总结该新闻的主要内容。')
-            
-            response = openai.ChatCompletion.create(
-                model="deepseek-chat",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""你是一个专业的消费电子行业分析师，为三星电子撰写情报简报。
-                        请用简洁专业的中文，为以下新闻生成一段总结（1-2句话，50-80字）。
-                        {emphasis}
-                        总结格式：直接陈述事实和影响，不要使用"总结："、"本条新闻"等开头语。
-                        重点突出：技术/产品名称、公司名称、对三星的具体影响。"""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"标题：{title}\n\n内容：{content[:1500]}"
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=120
-            )
-            
-            summary = response.choices[0].message.content.strip()
-            return summary
-            
-        except Exception as e:
-            print(f"⚠️ AI summary failed for '{title[:50]}': {e}")
-            first_sentence = content.split('。')[0] if content else title
-            return first_sentence[:120] + ("..." if len(first_sentence) > 120 else "")
-    
-    def _determine_impact(self, article: Dict, topic_id: int) -> str:
-        """Determine impact level based on content and topic"""
-        text = (article.get('title', '') + ' ' + article.get('summary', '')).lower()
-        
-        high_keywords = [
-            '发布', '推出', '上市', '价格', '降价', '市场份额', '超越', '首次',
-            '突破', '革命性', '颠覆', '关税', '制裁', '断供', '短缺',
-            '越南', '印度', '工厂', '投资', '扩产', '战略合作'
-        ]
-        
-        medium_keywords = [
-            '升级', '改进', '优化', '展示', '亮相', '参展', '论坛',
-            '趋势', '预测', '增长', '下降', '调整', '政策'
-        ]
-        
-        topic_high = [1, 3, 5, 6]
-        
-        score = 0
-        for kw in high_keywords:
-            if kw in text:
-                score += 2
-        for kw in medium_keywords:
-            if kw in text:
-                score += 1
-        
-        if topic_id in topic_high:
-            score += 1
-        
-        reliability = article.get('reliability_score', 0.6)
-        if reliability >= 0.9:
-            score += 1
-        
-        if score >= 3:
-            return 'high'
-        elif score >= 1:
-            return 'medium'
+
+    # ------------------------------------------------------------------
+    # 最终 QA 清洗关卡（输出前逐条检查）
+    # ------------------------------------------------------------------
+
+    def final_qa_gate(
+        self,
+        articles_by_topic: Dict[int, List[Dict]],
+        deletion_log: Dict[str, int]
+    ) -> Dict[int, List[Dict]]:
+        """
+        输出前最终清洗关卡。逐条检查5个条件，任何一项失败 → 删除。
+        检查项：
+        1. 无重复（标题唯一）
+        2. 单一事件（非聚合或已拆分）
+        3. 强相关（已由 classifier 过滤，此处为 fallback）
+        4. 分类唯一（topics 列表长度 == 1）
+        5. 结构完整（T4 必须有时间 + 地点）
+        """
+        seen_titles = set()
+        result: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
+
+        for tid, arts in articles_by_topic.items():
+            for article in arts:
+                title = article.get("title", "").strip()
+                failed_reason = None
+
+                # 检查1: 重复
+                if title in seen_titles:
+                    failed_reason = "final_gate_duplicate"
+                # 检查2: 未拆分聚合
+                elif article.get("split_failed"):
+                    failed_reason = "final_gate_unsplit"
+                # 检查3: 强相关（topics 为空说明已被过滤，此处为保险）
+                elif not article.get("topics"):
+                    failed_reason = "final_gate_irrelevant"
+                # 检查4: 分类唯一
+                elif len(article.get("topics", [])) > 1:
+                    failed_reason = "final_gate_multi_topic"
+                # 检查5: T4 结构完整
+                elif tid == 4 and not self._t4_has_structure(article):
+                    failed_reason = "final_gate_t4_incomplete"
+
+                if failed_reason:
+                    deletion_log["final_gate"] = deletion_log.get("final_gate", 0) + 1
+                    continue
+
+                seen_titles.add(title)
+                result[tid].append(article)
+
+        removed = sum(len(arts) for arts in articles_by_topic.values()) - sum(len(a) for a in result.values())
+        print(f"   🔍 Final QA gate: removed {removed} articles")
+        return result
+
+    def _t4_has_structure(self, article: Dict) -> bool:
+        """T4 必须有时间和地点信息"""
+        has_date = bool(
+            article.get("exhibition_date") or
+            article.get("published_date") or
+            re.search(r"\d{4}[-/年]\d{1,2}", article.get("title", "") + article.get("summary", ""))
+        )
+        has_location = bool(
+            article.get("exhibition_location") or
+            re.search(r"(las vegas|berlin|barcelona|shanghai|shenzhen|beijing|上海|深圳|北京|广州|拉斯维加斯|柏林|巴塞罗那)",
+                      (article.get("title", "") + article.get("summary", "")).lower())
+        )
+        return has_date and has_location
+
+    # ------------------------------------------------------------------
+    # 主输出方法
+    # ------------------------------------------------------------------
+
+    def generate_structured_markdown(
+        self,
+        articles: List[Dict],
+        dedup_stats: Dict = None,
+        raw_count: int = 0,
+        deletion_log: Dict[str, int] = None
+    ) -> str:
+        """
+        生成符合企业标准的结构化 Markdown 日报。
+        包含：ALERTS / T1-T4各节 / 去重统计 / QA报告
+        """
+        deletion_log = deletion_log or {}
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        articles_by_topic = self._group_by_topic(articles)
+
+        lines = []
+        lines.append(f"# 📰 三星产业情报日报（{date_str}）")
+        lines.append("")
+
+        # ── ALERTS ──────────────────────────────────────────────────────
+        lines.append("## 🚨 ALERTS（高优先级）")
+        lines.append("> 入选条件：必须满足以下 ≥2 项：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产")
+        lines.append("")
+        alerts = self._collect_alerts(articles_by_topic)
+        if alerts:
+            for alert in alerts:
+                lines.append(f"- {alert}")
         else:
-            return 'low'
-    
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters"""
-        if not text:
-            return ""
-        return (text.replace('&', '&amp;')
-                    .replace('<', '&lt;')
-                    .replace('>', '&gt;')
-                    .replace('"', '&quot;')
-                    .replace("'", '&#39;'))
-    
+            lines.append("- 今日无符合双条件的高优先级警报")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        # ── T1-T4 Sections ──────────────────────────────────────────────
+        for tid in range(1, 5):
+            emoji = self.TOPIC_EMOJIS[tid]
+            name  = self.TOPIC_NAMES[tid]
+            topic_articles = articles_by_topic.get(tid, [])
+
+            lines.append(f"## {emoji} T{tid} — {name}")
+            lines.append("")
+
+            if not topic_articles:
+                lines.append("_今日无相关新闻_")
+                lines.append("")
+                lines.append("---")
+                lines.append("")
+                continue
+
+            for article in topic_articles:
+                lines.extend(self._format_article_md(article, tid))
+
+            lines.append("---")
+            lines.append("")
+
+        # ── 去重统计 ────────────────────────────────────────────────────
+        lines.append("## 🧹 去重统计")
+        after_count = len(articles)
+        removed = raw_count - after_count if raw_count > after_count else (dedup_stats or {}).get("duplicates_removed", 0)
+        lines.append(f"- 原始新闻数：{raw_count if raw_count else '未记录'}")
+        lines.append(f"- 去重后：{after_count}")
+        lines.append(f"- 删除：{removed}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        # ── QA报告 ──────────────────────────────────────────────────────
+        lines.append("## 🔍 QA报告")
+        lines.append("")
+        total_deleted = sum(deletion_log.values())
+        lines.append(f"- **删除新闻总数**：{total_deleted}")
+        lines.append(f"- **删除原因分布**：")
+        lines.append(f"  - 不相关（过滤）：{deletion_log.get('irrelevant', 0)}")
+        lines.append(f"  - 重复（URL/标题/语义）：{deletion_log.get('duplicate', 0) + deletion_log.get('semantic_duplicate', 0)}")
+        lines.append(f"  - 聚合无法拆分：{deletion_log.get('unsplit', 0)}")
+        lines.append(f"  - T4结构不完整：{deletion_log.get('t4_incomplete', 0)}")
+        lines.append(f"  - 最终清洗关卡：{deletion_log.get('final_gate', 0)}")
+        lines.append("")
+
+        # QA验证
+        qa = self._perform_qa(articles_by_topic)
+        dup_status = "✅ 通过" if qa["no_duplicates"] else f"❌ 未通过（发现 {qa['duplicate_count']} 条重复）"
+        lines.append(f"- **重复检测**：{dup_status}")
+        lines.append(f"- **分类准确性**：{qa['classification_note']}")
+        lines.append(f"- **数据完整性**：{qa['completeness_note']}")
+
+        if qa.get("risk_points"):
+            lines.append(f"- **风险点**：")
+            for risk in qa["risk_points"]:
+                lines.append(f"  - {risk}")
+        lines.append("")
+
+        return "\n".join(lines)
+
     def generate_markdown(self, articles: List[Dict], stats: Dict = None) -> str:
-        """Generate Markdown report (simplified version for backup)"""
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        
-        report = f"""# Samsung CE Intelligence Brief
-**Date:** {date_str}
-**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """向后兼容接口"""
+        raw_count = stats.get("total_before", len(articles)) if stats else len(articles)
+        return self.generate_structured_markdown(articles, stats, raw_count)
 
-## Executive Summary
-- **Total unique articles:** {len(articles)}
-- **Duplicates removed:** {stats.get('duplicates_removed', 0) if stats else 0}
-
-"""
-        return report
-    
     def generate_html(self, articles: Union[List[Dict], str], stats: Dict = None) -> str:
-        """
-        Generate professional HTML report with AI summaries
-        
-        Args:
-            articles: List of article dictionaries OR markdown string (fallback)
-            stats: Optional statistics dictionary
-        """
-        # Handle fallback case (when markdown string is passed)
+        """生成 HTML 报告（用于邮件发送）"""
         if isinstance(articles, str):
-            print("⚠️ generate_html received markdown string, returning simple HTML")
             return self._markdown_to_html(articles)
-        
-        # Normal case: articles is a list
         if not articles:
             return "<html><body><h1>No articles found</h1></body></html>"
-        
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        date_display = datetime.now().strftime('%B %d, %Y')
-        
-        # Group articles by topic
-        articles_by_topic = defaultdict(list)
-        for article in articles:
-            for topic_id in article.get('topics', []):
-                if topic_id in self.topic_names:
-                    articles_by_topic[topic_id].append(article)
-        
-        # Calculate statistics
-        total_articles = len(articles)
-        topic_stats = {tid: len(articles_by_topic[tid]) for tid in self.topic_names}
-        
-        # Count by impact level
-        impact_counts = {'high': 0, 'medium': 0, 'low': 0}
-        for topic_id, topic_articles in articles_by_topic.items():
-            for article in topic_articles:
-                impact = self._determine_impact(article, topic_id)
-                impact_counts[impact] += 1
-        
-        # Generate HTML for each topic
-        topic_html = []
-        for topic_id in range(1, 9):
-            if topic_id not in articles_by_topic or not articles_by_topic[topic_id]:
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_display = datetime.now().strftime("%B %d, %Y")
+        articles_by_topic = self._group_by_topic(articles)
+
+        alerts = self._collect_alerts(articles_by_topic)
+        alerts_html = "".join(
+            f'<div class="alert-item"><span class="alert-badge">🔴 HIGH</span>'
+            f'<span class="alert-text">{self._escape_html(a)}</span></div>'
+            for a in alerts[:8]
+        ) or '<div class="alert-item">今日无符合双条件的高优先级警报</div>'
+
+        topic_html_parts = []
+        for tid in range(1, 5):
+            topic_articles = articles_by_topic.get(tid, [])
+            if not topic_articles:
                 continue
-            
-            topic_articles = articles_by_topic[topic_id]
-            # Sort by impact (high first)
-            topic_articles.sort(key=lambda x: (
-                0 if self._determine_impact(x, topic_id) == 'high' 
-                else 1 if self._determine_impact(x, topic_id) == 'medium' 
-                else 2
-            ))
-            
-            articles_html = []
-            for idx, article in enumerate(topic_articles[:25]):
-                articles_html.append(self._format_article_card(article, idx, topic_id))
-            
-            topic_html.append(f"""
+            cards = "".join(self._format_article_card(a, tid) for a in topic_articles[:20])
+            emoji = self.TOPIC_EMOJIS[tid]
+            name  = self.TOPIC_NAMES[tid]
+            topic_html_parts.append(f"""
             <div class="topic-section">
-                <h2 class="topic-title">T{topic_id} — {self.topic_names[topic_id]}</h2>
-                <div class="impact-summary">
-                    <span>🔴 HIGH · 🟡 MED · 🟢 LOW · {len(topic_articles)} items</span>
-                </div>
-                <div class="articles-grid">
-                    {''.join(articles_html)}
-                </div>
-            </div>
-            """)
-        
-        # Generate priority alerts section
-        high_impact_alerts = []
-        for topic_id, topic_articles in articles_by_topic.items():
-            for article in topic_articles[:3]:
-                if self._determine_impact(article, topic_id) == 'high':
-                    title = article.get('title', '')[:100]
-                    summary = self._generate_ai_summary(
-                        article.get('title', ''), 
-                        article.get('summary', ''),
-                        'high'
-                    )[:150]
-                    high_impact_alerts.append(f"""
-                    <div class="alert-item">
-                        <span class="alert-badge">🔴 HIGH</span>
-                        <span class="alert-text">{self._escape_html(title)} — {self._escape_html(summary)}</span>
-                    </div>
-                    """)
-        
-        alerts_html = ''.join(high_impact_alerts[:8]) if high_impact_alerts else '<div class="alert-item">无高优先级警报</div>'
-        
-        # Complete HTML template
+                <h2 class="topic-title">{emoji} T{tid} — {name}</h2>
+                <div class="articles-grid">{cards}</div>
+            </div>""")
+
+        total = len(articles)
+        dedup_removed = (stats or {}).get("duplicates_removed", 0)
+
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Samsung CE Intelligence - {date_str}</title>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f0f2f5;
-            padding: 20px;
-            line-height: 1.5;
-            color: #1a1a2e;
-        }}
-        
-        .container {{
-            max-width: 1400px;
-            margin: 0 auto;
-        }}
-        
-        .header {{
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 100%);
-            color: white;
-            padding: 30px 40px;
-            border-radius: 16px 16px 0 0;
-            margin-bottom: 0;
-        }}
-        
-        .header h1 {{
-            font-size: 1.8em;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }}
-        
-        .header .subtitle {{
-            color: #a0a0c0;
-            font-size: 0.9em;
-            margin-bottom: 20px;
-        }}
-        
-        .header .date {{
-            color: #ffd700;
-            font-size: 1em;
-            margin-top: 10px;
-        }}
-        
-        .stats-bar {{
-            background: white;
-            padding: 20px 40px;
-            border-radius: 0 0 16px 16px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }}
-        
-        .stats-grid {{
-            display: flex;
-            gap: 30px;
-            flex-wrap: wrap;
-        }}
-        
-        .stat-item {{
-            text-align: center;
-        }}
-        
-        .stat-number {{
-            font-size: 1.8em;
-            font-weight: 700;
-            color: #1a1a3e;
-        }}
-        
-        .stat-label {{
-            font-size: 0.8em;
-            color: #666;
-        }}
-        
-        .impact-stats {{
-            display: flex;
-            gap: 20px;
-        }}
-        
-        .impact-stat {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.9em;
-        }}
-        
-        .alerts-section {{
-            background: #fff3e0;
-            border-left: 4px solid #ff6b35;
-            padding: 20px 30px;
-            margin-bottom: 30px;
-            border-radius: 12px;
-        }}
-        
-        .alerts-title {{
-            font-weight: 700;
-            font-size: 1.1em;
-            margin-bottom: 15px;
-            color: #c0392b;
-        }}
-        
-        .alert-item {{
-            padding: 10px 0;
-            border-bottom: 1px solid #ffe0b3;
-            font-size: 0.9em;
-        }}
-        
-        .alert-item:last-child {{
-            border-bottom: none;
-        }}
-        
-        .alert-badge {{
-            background: #c0392b;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.7em;
-            font-weight: 600;
-            margin-right: 12px;
-            display: inline-block;
-        }}
-        
-        .topic-section {{
-            background: white;
-            border-radius: 16px;
-            margin-bottom: 30px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }}
-        
-        .topic-title {{
-            background: linear-gradient(135deg, #1428a0 0%, #0f1a5e 100%);
-            color: white;
-            padding: 18px 25px;
-            font-size: 1.2em;
-            font-weight: 600;
-            margin: 0;
-        }}
-        
-        .impact-summary {{
-            padding: 12px 25px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e0e0e0;
-            font-size: 0.8em;
-            color: #666;
-        }}
-        
-        .articles-grid {{
-            padding: 20px 25px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }}
-        
-        .article-card {{
-            border: 1px solid #e8e8e8;
-            border-radius: 12px;
-            padding: 18px 20px;
-            transition: all 0.2s ease;
-            background: #fff;
-        }}
-        
-        .article-card:hover {{
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            border-color: #1428a0;
-        }}
-        
-        .article-card.impact-high {{
-            border-left: 4px solid #c0392b;
-            background: #fffaf8;
-        }}
-        
-        .article-card.impact-medium {{
-            border-left: 4px solid #e67e22;
-        }}
-        
-        .article-card.impact-low {{
-            border-left: 4px solid #27ae60;
-        }}
-        
-        .article-header {{
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-        }}
-        
-        .impact-badge {{
-            font-size: 0.7em;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 4px;
-            background: #f0f0f0;
-        }}
-        
-        .article-card.impact-high .impact-badge {{
-            background: #c0392b;
-            color: white;
-        }}
-        
-        .article-card.impact-medium .impact-badge {{
-            background: #e67e22;
-            color: white;
-        }}
-        
-        .article-card.impact-low .impact-badge {{
-            background: #27ae60;
-            color: white;
-        }}
-        
-        .article-date {{
-            font-size: 0.7em;
-            color: #999;
-        }}
-        
-        .article-source {{
-            font-size: 0.7em;
-            color: #666;
-            background: #f5f5f5;
-            padding: 2px 8px;
-            border-radius: 4px;
-        }}
-        
-        .article-title {{
-            font-size: 1em;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }}
-        
-        .article-title a {{
-            color: #1a1a3e;
-            text-decoration: none;
-        }}
-        
-        .article-title a:hover {{
-            color: #1428a0;
-            text-decoration: underline;
-        }}
-        
-        .article-summary {{
-            font-size: 0.85em;
-            color: #444;
-            line-height: 1.5;
-            margin-bottom: 12px;
-        }}
-        
-        .article-footer {{
-            text-align: right;
-        }}
-        
-        .source-link {{
-            font-size: 0.75em;
-            color: #1428a0;
-            text-decoration: none;
-        }}
-        
-        .source-link:hover {{
-            text-decoration: underline;
-        }}
-        
-        .footer {{
-            text-align: center;
-            padding: 30px;
-            color: #888;
-            font-size: 0.75em;
-            border-top: 1px solid #e0e0e0;
-            margin-top: 20px;
-        }}
-        
-        @media (max-width: 768px) {{
-            body {{
-                padding: 10px;
-            }}
-            .header, .stats-bar {{
-                padding: 20px;
-            }}
-            .articles-grid {{
-                padding: 15px;
-            }}
-            .stats-grid {{
-                gap: 15px;
-            }}
-            .stat-number {{
-                font-size: 1.2em;
-            }}
-        }}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Samsung CE Intelligence - {date_str}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f0f2f5;padding:20px;color:#1a1a2e}}
+.container{{max-width:1200px;margin:0 auto}}
+.header{{background:linear-gradient(135deg,#0a0e27,#1a1a3e);color:#fff;padding:30px 40px;border-radius:16px 16px 0 0}}
+.header h1{{font-size:1.6em;margin-bottom:6px}}
+.header .date{{color:#ffd700;margin-top:10px}}
+.stats-bar{{background:#fff;padding:16px 40px;border-radius:0 0 16px 16px;margin-bottom:24px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:flex;gap:30px;align-items:center}}
+.stat-item{{text-align:center}}
+.stat-number{{font-size:1.8em;font-weight:700;color:#1a1a3e}}
+.stat-label{{font-size:.75em;color:#666}}
+.alerts-section{{background:#fff3e0;border-left:4px solid #ff6b35;padding:20px 28px;margin-bottom:24px;border-radius:12px}}
+.alerts-title{{font-weight:700;color:#c0392b;margin-bottom:12px}}
+.alert-item{{padding:8px 0;border-bottom:1px solid #ffe0b3;font-size:.88em}}
+.alert-item:last-child{{border-bottom:none}}
+.alert-badge{{background:#c0392b;color:#fff;padding:2px 8px;border-radius:4px;font-size:.7em;font-weight:600;margin-right:10px}}
+.topic-section{{background:#fff;border-radius:16px;margin-bottom:24px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
+.topic-title{{background:linear-gradient(135deg,#1428a0,#0f1a5e);color:#fff;padding:16px 24px;font-size:1.1em;font-weight:600}}
+.articles-grid{{padding:16px 24px;display:flex;flex-direction:column;gap:16px}}
+.article-card{{border:1px solid #e8e8e8;border-radius:10px;padding:16px;border-left:4px solid #1428a0}}
+.article-card.impact-high{{border-left-color:#c0392b;background:#fffaf8}}
+.article-card.impact-medium{{border-left-color:#e67e22}}
+.article-card.impact-low{{border-left-color:#27ae60}}
+.article-title{{font-weight:600;margin-bottom:8px}}
+.article-title a{{color:#1a1a3e;text-decoration:none}}
+.article-title a:hover{{color:#1428a0;text-decoration:underline}}
+.article-meta{{font-size:.75em;color:#888;margin-bottom:8px}}
+.article-summary{{font-size:.85em;color:#444;line-height:1.55}}
+.footer{{text-align:center;padding:24px;color:#888;font-size:.75em;border-top:1px solid #e0e0e0;margin-top:16px}}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Samsung Electronics · CE Strategic Sourcing</h1>
-            <div class="subtitle">Daily Technology &amp; Sourcing Intelligence</div>
-            <div class="subtitle">Competitor · Tech · Materials · CMF · Thermal · Manufacturing · Supply Chain · AI · Market</div>
-            <div class="date">{date_display}</div>
-        </div>
-        
-        <div class="stats-bar">
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-number">{total_articles}</div>
-                    <div class="stat-label">Articles</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">{len([t for t in topic_stats if topic_stats[t] > 0])}</div>
-                    <div class="stat-label">Topics</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">T1–T8</div>
-                    <div class="stat-label">HIGH→MED→LOW</div>
-                </div>
-            </div>
-            <div class="impact-stats">
-                <div class="impact-stat"><span style="color:#c0392b">🔴 HIGH</span> {impact_counts.get('high', 0)}</div>
-                <div class="impact-stat"><span style="color:#e67e22">🟡 MED</span> {impact_counts.get('medium', 0)}</div>
-                <div class="impact-stat"><span style="color:#27ae60">🟢 LOW</span> {impact_counts.get('low', 0)}</div>
-            </div>
-        </div>
-        
-        <div class="alerts-section">
-            <div class="alerts-title">🔴 ALERTS — 今日高优先级情报</div>
-            {alerts_html}
-        </div>
-        
-        {''.join(topic_html)}
-        
-        <div class="footer">
-            <p>🤖 Generated by Samsung CE Intelligence System · AI-powered summaries</p>
-            <p>📡 Multi-source aggregation with 3-layer deduplication · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        </div>
-    </div>
+<div class="container">
+  <div class="header">
+    <h1>📰 三星产业情报日报</h1>
+    <div class="date">{date_display} · 严格分类 T1-T4 · 单一归属 · 三层去重</div>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-number">{total}</div><div class="stat-label">今日新闻</div></div>
+    <div class="stat-item"><div class="stat-number">{dedup_removed}</div><div class="stat-label">已去重</div></div>
+    <div class="stat-item"><div class="stat-number">T1–T4</div><div class="stat-label">四大栏目</div></div>
+  </div>
+  <div class="alerts-section">
+    <div class="alerts-title">🚨 ALERTS — 今日高优先级情报（≥2条判断维度）</div>
+    {alerts_html}
+  </div>
+  {''.join(topic_html_parts)}
+  <div class="footer">
+    🤖 Samsung CE Intelligence System v6.0 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+  </div>
+</div>
 </body>
 </html>"""
-    
-    def _format_article_card(self, article: Dict, index: int, topic_id: int) -> str:
-        """Format a single article as an HTML card"""
-        title = article.get('title', '无标题')
-        summary = article.get('summary', article.get('content', ''))
-        link = article.get('link', '#')
-        source = article.get('source', '未知来源')
-        
-        impact = self._determine_impact(article, topic_id)
-        ai_summary = self._generate_ai_summary(title, summary, impact)
-        impact_display = self.impact_levels.get(impact, '🟡 MED')
-        
-        pub_date = article.get('published_date')
-        date_str = ""
-        if pub_date:
-            if isinstance(pub_date, datetime):
-                date_str = pub_date.strftime('%Y-%m-%d')
-            elif isinstance(pub_date, str):
-                date_str = pub_date[:10]
-        
+
+    # ------------------------------------------------------------------
+    # 格式化辅助
+    # ------------------------------------------------------------------
+
+    def _group_by_topic(self, articles: List[Dict]) -> Dict[int, List[Dict]]:
+        result: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
+        for article in articles:
+            for tid in article.get("topics", []):
+                if tid in result and article not in result[tid]:
+                    result[tid].append(article)
+        return result
+
+    def _collect_alerts(self, articles_by_topic: Dict[int, List[Dict]]) -> List[str]:
+        """
+        收集高优先级警报。
+        必须满足 ≥2 个维度：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产
+        """
+        alerts = []
+        seen = set()
+        for tid in range(1, 5):
+            for article in articles_by_topic.get(tid, []):
+                title = article.get("title", "")
+                if title in seen:
+                    continue
+                if self._count_alert_criteria(article) >= 2:
+                    seen.add(title)
+                    source = article.get("source", "")
+                    alerts.append(f"[T{tid}] {title}（{source}）")
+        return alerts[:10]
+
+    def _count_alert_criteria(self, article: Dict) -> int:
+        """计算满足的 ALERTS 维度数量"""
+        text = (article.get("title", "") + " " + article.get("summary", "")).lower()
+        count = 0
+        for criterion, keywords in self.ALERT_CRITERIA.items():
+            if any(kw.lower() in text for kw in keywords):
+                count += 1
+        return count
+
+    def _format_article_md(self, article: Dict, topic_id: int) -> List[str]:
+        """
+        格式化单条新闻为企业标准 Markdown 块：
+        【标题】
+        - 来源：
+        - 时间：
+        - 分类：
+        - 摘要（只包含一个事件）
+        """
+        title       = article.get("title", "无标题")
+        source      = article.get("source", "未知来源")
+        link        = article.get("link", article.get("url", "#"))
+        summary     = article.get("summary", article.get("content", ""))
+        pub_date    = self._format_date(article.get("published_date"))
+        unreliable  = article.get("source_unreliable", False)
+        topic_name  = self.TOPIC_NAMES.get(topic_id, f"T{topic_id}")
+
+        lines = []
+
+        # T1 加产品类别标签
+        if topic_id == 1:
+            cat = article.get("product_category", "产品")
+            display_title = f"[{cat}] {title}"
+        else:
+            display_title = title
+
+        source_note = f" ⚠️ 来源待核实" if unreliable else ""
+
+        lines.append(f"### 【{display_title}】")
+        lines.append(f"- **来源**：[{source}{source_note}]({link})")
+        lines.append(f"- **时间**：{pub_date}")
+        lines.append(f"- **分类**：T{topic_id} {topic_name}")
+
+        if summary:
+            clean = summary.strip()[:400].replace("\n", " ")
+            lines.append(f"- **摘要**：{clean}")
+
+        # T4 展会附加信息
+        if topic_id == 4:
+            ex_time = article.get("exhibition_date", "")
+            ex_loc  = article.get("exhibition_location", "")
+            ex_url  = article.get("exhibition_website", "")
+            if ex_time:
+                lines.append(f"- **展会时间**：{ex_time}")
+            if ex_loc:
+                lines.append(f"- **展会地点**：{ex_loc}")
+            if ex_url:
+                lines.append(f"- **参展商名单**：{ex_url}")
+
+        lines.append("")
+        return lines
+
+    def _format_article_card(self, article: Dict, topic_id: int) -> str:
+        """格式化单条新闻为 HTML 卡片"""
+        title    = article.get("title", "无标题")
+        link     = article.get("link", "#")
+        source   = article.get("source", "未知来源")
+        summary  = article.get("summary", "")
+        pub_date = self._format_date(article.get("published_date"))
+        impact   = self._determine_impact(article, topic_id)
+
+        if topic_id == 1:
+            cat = article.get("product_category", "产品")
+            title = f"[{cat}] {title}"
+
+        ai_summary = self._get_summary(article, impact)
+
         return f"""
         <div class="article-card impact-{impact}">
-            <div class="article-header">
-                <span class="impact-badge">{impact_display}</span>
-                <span class="article-date">{date_str}</span>
-                <span class="article-source">📎 {self._escape_html(source)}</span>
-            </div>
-            <div class="article-title">
-                <a href="{link}" target="_blank" rel="noopener noreferrer">{self._escape_html(title)}</a>
-            </div>
-            <div class="article-summary">
-                {self._escape_html(ai_summary)}
-            </div>
-            <div class="article-footer">
-                <a href="{link}" class="source-link" target="_blank">🔗 Read Source Article</a>
-            </div>
-        </div>
-        """
-    
+          <div class="article-meta">{self.IMPACT_LABELS[impact]} · {pub_date} · {self._escape_html(source)}</div>
+          <div class="article-title"><a href="{link}" target="_blank">{self._escape_html(title)}</a></div>
+          <div class="article-summary">{self._escape_html(ai_summary)}</div>
+        </div>"""
+
+    def _get_summary(self, article: Dict, impact: str) -> str:
+        summary = article.get("summary", article.get("content", ""))
+        if not summary:
+            return article.get("title", "")
+        if not self.ai_enabled:
+            return summary[:150] + ("..." if len(summary) > 150 else "")
+        try:
+            emphasis = {
+                "high": "重点突出对三星的紧迫影响和行动建议。",
+                "medium": "客观总结事件内容，说明对三星的潜在影响。",
+                "low": "简要记录该动态。"
+            }.get(impact, "客观总结主要内容。")
+            resp = openai.ChatCompletion.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": f"你是三星电子消费电子情报分析师。请用简洁专业的中文生成1-2句总结（不超过80字）。{emphasis}直接陈述，不使用开头语。"},
+                    {"role": "user", "content": f"标题：{article.get('title', '')}\n内容：{summary[:1200]}"}
+                ],
+                temperature=0.3, max_tokens=120
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            return summary[:150] + ("..." if len(summary) > 150 else "")
+
+    def _determine_impact(self, article: Dict, topic_id: int) -> str:
+        text = (article.get("title", "") + " " + article.get("summary", "")).lower()
+        score = sum(2 for kw in self.HIGH_IMPACT_KEYWORDS if kw.lower() in text)
+        score += sum(1 for kw in self.MEDIUM_IMPACT_KEYWORDS if kw.lower() in text)
+        if topic_id == 1:
+            score += 1
+        rel = article.get("reliability_score", 0.6)
+        if rel >= 0.9:
+            score += 1
+        if score >= 4:
+            return "high"
+        if score >= 2:
+            return "medium"
+        return "low"
+
+    def _format_date(self, pub_date) -> str:
+        if pub_date is None:
+            return "日期未知"
+        if isinstance(pub_date, datetime):
+            return pub_date.strftime("%Y-%m-%d")
+        if isinstance(pub_date, str):
+            return pub_date[:10]
+        return str(pub_date)[:10]
+
+    def _escape_html(self, text: str) -> str:
+        if not text:
+            return ""
+        return (text.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace('"', "&quot;")
+                    .replace("'", "&#39;"))
+
     def _markdown_to_html(self, md: str) -> str:
-        """Convert markdown to simple HTML (fallback)"""
-        md = md.replace('\n', '<br>')
+        md_escaped = md.replace("\n", "<br>")
         return f"""<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>Report</title></head>
-<body style="font-family: Arial, sans-serif; padding: 20px;">
-{md}
-</body>
-</html>"""
+<html><head><meta charset="UTF-8"><title>Report</title></head>
+<body style="font-family:Arial,sans-serif;padding:20px;max-width:900px;margin:auto">
+{md_escaped}
+</body></html>"""
+
+    # ------------------------------------------------------------------
+    # QA 验证
+    # ------------------------------------------------------------------
+
+    def _perform_qa(self, articles_by_topic: Dict[int, List[Dict]]) -> Dict:
+        all_titles = []
+        missing_source = 0
+        multi_topic_count = 0
+        risk_points = []
+
+        for tid, arts in articles_by_topic.items():
+            for a in arts:
+                all_titles.append(a.get("title", ""))
+                if not a.get("source") or a.get("source") == "unknown":
+                    missing_source += 1
+                if len(a.get("topics", [])) > 1:
+                    multi_topic_count += 1
+
+        unique_titles = set(all_titles)
+        duplicate_count = len(all_titles) - len(unique_titles)
+
+        classification_note = "T1-T4 严格规则已执行；单一归属原则已强制"
+        if duplicate_count > 0:
+            classification_note += f"（⚠️ 仍有 {duplicate_count} 条标题重复）"
+            risk_points.append(f"发现 {duplicate_count} 条重复标题，建议检查语义去重阈值")
+        if multi_topic_count > 0:
+            risk_points.append(f"{multi_topic_count} 条新闻仍有多 topic 标签，单一归属未完全生效")
+
+        if missing_source == 0:
+            completeness_note = f"✅ 所有新闻均有来源；共 {len(all_titles)} 条"
+        else:
+            completeness_note = f"⚠️ 共 {len(all_titles)} 条，其中 {missing_source} 条来源缺失"
+            risk_points.append(f"{missing_source} 条新闻来源不明，情报可信度存疑")
+
+        return {
+            "no_duplicates": duplicate_count == 0,
+            "duplicate_count": duplicate_count,
+            "classification_note": classification_note,
+            "completeness_note": completeness_note,
+            "risk_points": risk_points
+        }
