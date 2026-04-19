@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Samsung CE Intelligence System - Main Orchestrator
-Version: 5.0 - T1-T4严格分类 + QA验证 + 结构化Markdown输出
+Version: 6.0 - 单一归属 + 强制原子化删除 + 语义去重 + T4结构校验 + 最终QA关卡
 """
 
 import os
@@ -29,7 +29,7 @@ from google_news_fetcher import GoogleNewsFetcher, TOPIC_SEARCH_KEYWORDS
 
 
 class SamsungIntelligenceSystem:
-    """主调度类 - 执行完整的情报处理流水线"""
+    """主调度类 - 执行完整的情报处理流水线 v6.0"""
 
     TOPIC_NAMES = {
         1: "T1 竞品动态",
@@ -84,9 +84,19 @@ class SamsungIntelligenceSystem:
 
     def run(self, dry_run: bool = False) -> Dict:
         print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v5.0")
+        print("🔵 Samsung CE Intelligence System v6.0")
         print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
+
+        # 删除原因追踪
+        deletion_log: Dict[str, int] = {
+            "irrelevant": 0,
+            "duplicate": 0,
+            "semantic_duplicate": 0,
+            "unsplit": 0,
+            "t4_incomplete": 0,
+            "final_gate": 0
+        }
 
         try:
             # ── Step 1: 抓取 ────────────────────────────────────────────
@@ -104,35 +114,39 @@ class SamsungIntelligenceSystem:
             parsed = self.parser.parse_batch(articles, days_back=3)
             print(f"   ✅ Parsed {len(parsed)} articles (3-day recency filter)")
 
-            # ── Step 3: 新闻原子化（强制执行）─────────────────────────────
-            print("\n✂️ Step 3: Atomic splitting (mandatory)...")
-            atomic = self.splitter.split_batch(parsed)
-            print(f"   ✅ After split: {len(atomic)} atomic articles")
+            # ── Step 3: 强制原子化（聚合无法拆分 → 直接删除）─────────────
+            print("\n✂️ Step 3: Atomic splitting (unsplittable aggregates DELETED)...")
+            atomic, unsplit_deleted = self.splitter.split_batch(parsed)
+            deletion_log["unsplit"] += unsplit_deleted
+            print(f"   ✅ After split: {len(atomic)} atomic articles ({unsplit_deleted} aggregates deleted)")
 
             # ── Step 4: 原始来源追溯 ─────────────────────────────────────
             print("\n🔗 Step 4: Origin tracking...")
             traced = self.tracker.trace_batch(atomic)
 
-            # ── Step 5: 严格分类 + 强相关过滤 ─────────────────────────────
-            print("\n🏷️ Step 5: Strict classification (T1-T4, Samsung-relevance filter)...")
+            # ── Step 5: 严格分类 + 强相关过滤（不相关 → 删除）─────────────
+            print("\n🏷️ Step 5: Strict classification (T1-T4) + relevance filter...")
+            classified = []
             for article in traced:
                 topics = self.classifier.classify(
                     article.get("title", ""),
                     article.get("summary", "")
                 )
+                if not topics:
+                    deletion_log["irrelevant"] += 1
+                    continue
                 article["topics"] = topics
                 article["reliability_score"] = self._get_reliability_score(article.get("source", ""))
-
-                # 为 T1 附加产品类别标签
                 if 1 in topics:
                     article["product_category"] = self.classifier.get_product_category(
                         article.get("title", ""),
                         article.get("summary", "")
                     )
+                classified.append(article)
 
             # 按 Topic 分组 (T1-T4)
             articles_by_topic: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
-            for article in traced:
+            for article in classified:
                 for tid in article.get("topics", []):
                     if 1 <= tid <= 4:
                         articles_by_topic[tid].append(article)
@@ -140,7 +154,6 @@ class SamsungIntelligenceSystem:
             print("   📊 Initial topic distribution:")
             for tid in range(1, 5):
                 print(f"      {self.TOPIC_NAMES[tid]}: {len(articles_by_topic[tid])} articles")
-
             self.classifier.print_stats()
 
             # ── Step 6: Google News 补充（Topic Coverage Guarantee）────────
@@ -155,6 +168,9 @@ class SamsungIntelligenceSystem:
                     new_arts = self.google_fetcher.search_by_topic(tid, keywords, days_back=3)
                     for art in new_arts[:needed + 2]:
                         topics = self.classifier.classify(art["title"], art.get("summary", ""))
+                        if not topics:
+                            deletion_log["irrelevant"] += 1
+                            continue
                         if tid not in topics:
                             topics.append(tid)
                         art["topics"] = topics
@@ -164,35 +180,70 @@ class SamsungIntelligenceSystem:
                             art["product_category"] = self.classifier.get_product_category(
                                 art["title"], art.get("summary", "")
                             )
-                        traced.append(art)
+                        classified.append(art)
                         articles_by_topic[tid].append(art)
                     print(f"      ✅ {self.TOPIC_NAMES[tid]}: now {len(articles_by_topic[tid])} articles")
                 else:
                     print(f"   ✅ {self.TOPIC_NAMES[tid]}: {current} articles")
 
-            # ── Step 7: 跨栏目去重（核心）────────────────────────────────
-            print("\n🔄 Step 7: Cross-topic deduplication (T1 > T2 > T3 > T4)...")
+            # ── Step 7: 跨栏目去重（单一归属原则）────────────────────────
+            print("\n🔄 Step 7: Cross-topic dedup → single ownership (T1>T2>T3>T4)...")
             articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
 
-            deduped = []
+            # ── Step 7.5: 语义级去重（同一事件只保留一条）─────────────────
+            print("\n🧠 Step 7.5: Semantic deduplication (same-event detection)...")
+            total_before_semantic = sum(len(a) for a in articles_by_topic.values())
+            all_articles_flat = []
             for arts in articles_by_topic.values():
-                deduped.extend(arts)
-            print(f"   ✅ After cross-topic dedup: {len(deduped)} unique articles")
+                all_articles_flat.extend(arts)
+
+            deduped_flat, sem_removed = self.classifier.semantic_deduplicate(all_articles_flat)
+            deletion_log["semantic_duplicate"] += sem_removed
+
+            # 重建 articles_by_topic（保留语义去重后的文章）
+            kept_ids = {id(a) for a in deduped_flat}
+            articles_by_topic = {1: [], 2: [], 3: [], 4: []}
+            for article in deduped_flat:
+                for tid in article.get("topics", []):
+                    if 1 <= tid <= 4:
+                        articles_by_topic[tid].append(article)
+            print(f"   ✅ Semantic dedup: {total_before_semantic} → {len(deduped_flat)} (removed {sem_removed})")
 
             # ── Step 8: 标准去重（URL / 标题相似度 / 历史比对）──────────────
             print("\n🔍 Step 8: Standard deduplication (URL + title fuzzy + history)...")
+            deduped = []
+            for arts in articles_by_topic.values():
+                deduped.extend(arts)
             final_articles, dedup_stats = self.deduplicator.deduplicate(deduped)
+            deletion_log["duplicate"] += dedup_stats.get("duplicates_removed", 0)
             print(f"   ✅ {dedup_stats.get('total_before', '?')} → {dedup_stats.get('total_after', '?')}")
 
-            # 重建 articles_by_topic 使用去重后文章
+            # 重建 articles_by_topic（单一归属已在Step7确保）
             articles_by_topic = {1: [], 2: [], 3: [], 4: []}
             for article in final_articles:
                 for tid in article.get("topics", []):
                     if 1 <= tid <= 4:
                         articles_by_topic[tid].append(article)
 
+            # ── Step 8.5: T4 结构校验（缺时间或地点 → 删除）────────────────
+            print("\n📅 Step 8.5: T4 structural validation (time + location required)...")
+            t4_before = len(articles_by_topic[4])
+            valid_t4 = []
+            for article in articles_by_topic[4]:
+                if self.reporter._t4_has_structure(article):
+                    valid_t4.append(article)
+                else:
+                    deletion_log["t4_incomplete"] += 1
+            articles_by_topic[4] = valid_t4
+            t4_removed = t4_before - len(valid_t4)
+            print(f"   ✅ T4: {t4_before} → {len(valid_t4)} ({t4_removed} removed for missing time/location)")
+
             # ── Step 9: AI 摘要 ──────────────────────────────────────────
             print("\n✍️ Step 9: Generating AI summaries...")
+            final_articles = []
+            for arts in articles_by_topic.values():
+                final_articles.extend(arts)
+
             summarized = 0
             for article in final_articles[:60]:
                 if not article.get("summary") or len(article.get("summary", "")) < 80:
@@ -203,50 +254,64 @@ class SamsungIntelligenceSystem:
                     summarized += 1
             print(f"   ✅ Summarized {summarized} articles")
 
-            # ── Step 10: 数据清洗 ─────────────────────────────────────────
-            print("\n🧹 Step 10: Data cleaning...")
+            # ── Step 10: 最终QA清洗关卡（输出前逐条校验）────────────────────
+            print("\n🚨 Step 10: Final QA gate (5-point check, delete on failure)...")
+            articles_by_topic = self.reporter.final_qa_gate(articles_by_topic, deletion_log)
+
+            # 重建最终列表
+            final_articles = []
+            for arts in articles_by_topic.values():
+                final_articles.extend(arts)
+
+            # ── Step 11: 数据清洗 ─────────────────────────────────────────
+            print("\n🧹 Step 11: Data cleaning...")
+            cleaned = []
             for article in final_articles:
-                # 确保每条新闻结构统一
                 if not article.get("source") or article.get("source") == "unknown":
                     article["source_unreliable"] = True
-                if not article.get("link") and not article.get("url"):
-                    final_articles.remove(article)
+                if article.get("link") or article.get("url"):
+                    cleaned.append(article)
+            final_articles = cleaned
             print(f"   ✅ Cleaned. Final count: {len(final_articles)}")
-
-            # ── Step 11: 生成报告 ─────────────────────────────────────────
-            print("\n📊 Step 11: Generating reports...")
-            output_dir = self.base_dir / "output"
-            output_dir.mkdir(exist_ok=True)
-            date_str = datetime.now().strftime("%Y%m%d")
-
-            # Markdown 主报告（结构化）
-            md_report = self.reporter.generate_structured_markdown(
-                final_articles, dedup_stats, raw_count
-            )
-            md_path = output_dir / f"report_{date_str}.md"
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write(md_report)
-            print(f"   ✅ Markdown report: {md_path}")
-
-            # HTML 报告（邮件用）
-            html_report = self.reporter.generate_html(final_articles, dedup_stats)
-            html_path = output_dir / f"report_{date_str}.html"
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_report)
-            print(f"   ✅ HTML report: {html_path}")
 
             # 打印最终分布
             print("\n   📊 Final topic distribution:")
             for tid in range(1, 5):
                 print(f"      {self.TOPIC_NAMES[tid]}: {len(articles_by_topic[tid])} articles")
 
-            # ── Step 12: 发送邮件 ─────────────────────────────────────────
+            # 打印删除汇总
+            print("\n   🗑️ Deletion summary:")
+            for reason, count in deletion_log.items():
+                if count > 0:
+                    print(f"      {reason}: {count}")
+
+            # ── Step 12: 生成报告 ─────────────────────────────────────────
+            print("\n📊 Step 12: Generating reports...")
+            output_dir = self.base_dir / "output"
+            output_dir.mkdir(exist_ok=True)
+            date_str = datetime.now().strftime("%Y%m%d")
+
+            md_report = self.reporter.generate_structured_markdown(
+                final_articles, dedup_stats, raw_count, deletion_log
+            )
+            md_path = output_dir / f"report_{date_str}.md"
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(md_report)
+            print(f"   ✅ Markdown report: {md_path}")
+
+            html_report = self.reporter.generate_html(final_articles, dedup_stats)
+            html_path = output_dir / f"report_{date_str}.html"
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_report)
+            print(f"   ✅ HTML report: {html_path}")
+
+            # ── Step 13: 发送邮件 ─────────────────────────────────────────
             if not dry_run:
-                print("\n📧 Step 12: Sending email...")
+                print("\n📧 Step 13: Sending email...")
                 success = self.mailer.send(html_report, date_str)
                 print("   ✅ Email sent!" if success else "   ❌ Email failed")
             else:
-                print("\n📧 Step 12: Skipped (dry-run mode)")
+                print("\n📧 Step 13: Skipped (dry-run mode)")
 
             self.deduplicator.close()
 
@@ -255,7 +320,7 @@ class SamsungIntelligenceSystem:
             print(f"✅ Completed in {elapsed:.1f}s")
             print("=" * 70)
 
-            return {"articles": final_articles, "stats": dedup_stats}
+            return {"articles": final_articles, "stats": dedup_stats, "deletion_log": deletion_log}
 
         except Exception as e:
             print(f"\n❌ System failed: {e}")
@@ -265,7 +330,7 @@ class SamsungIntelligenceSystem:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v5.0")
+    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v6.0")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
     parser.add_argument("--test-email", action="store_true", help="Test email configuration")
     parser.add_argument("--config", default="config/config.yaml", help="Config file path")

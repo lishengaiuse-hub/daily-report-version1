@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 Report Generator for Samsung CE Intelligence
-Version: 5.0 - 结构化Markdown输出 + QA验证 + T1-T4严格格式
+Version: 6.0 - 严格QA + 单一归属 + ALERTS双条件 + 新输出格式
 """
 
 import os
 import re
 from datetime import datetime
-from typing import List, Dict, Any, Union, Optional
+from typing import List, Dict, Any, Union, Optional, Tuple
 from collections import defaultdict
 import openai
 
@@ -49,6 +49,26 @@ class ReportGenerator:
         "upgrade", "improve", "exhibit", "trend", "forecast"
     ]
 
+    # ALERTS 四大判断维度（必须满足 ≥2 个）
+    ALERT_CRITERIA = {
+        "impacts_samsung": [
+            "samsung", "三星", "market share", "市场份额", "competitor", "竞争",
+            "rival", "beats samsung", "overtake", "超越三星"
+        ],
+        "core_tech": [
+            "ai", "chip", "芯片", "oled", "microled", "semiconductor", "半导体",
+            "display", "面板", "npu", "processor", "处理器", "memory", "内存"
+        ],
+        "supply_chain_risk": [
+            "supply chain", "供应链", "shortage", "短缺", "sanction", "制裁",
+            "export ban", "出口禁令", "tariff", "关税", "disruption", "断供"
+        ],
+        "major_investment": [
+            "investment", "投资", "billion", "亿", "expansion", "扩产",
+            "new factory", "新工厂", "建厂", "capacity increase", "产能"
+        ]
+    }
+
     def __init__(self, config: Dict):
         self.config = config
         api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -58,6 +78,73 @@ class ReportGenerator:
             openai.api_base = "https://api.deepseek.com/v1"
 
     # ------------------------------------------------------------------
+    # 最终 QA 清洗关卡（输出前逐条检查）
+    # ------------------------------------------------------------------
+
+    def final_qa_gate(
+        self,
+        articles_by_topic: Dict[int, List[Dict]],
+        deletion_log: Dict[str, int]
+    ) -> Dict[int, List[Dict]]:
+        """
+        输出前最终清洗关卡。逐条检查5个条件，任何一项失败 → 删除。
+        检查项：
+        1. 无重复（标题唯一）
+        2. 单一事件（非聚合或已拆分）
+        3. 强相关（已由 classifier 过滤，此处为 fallback）
+        4. 分类唯一（topics 列表长度 == 1）
+        5. 结构完整（T4 必须有时间 + 地点）
+        """
+        seen_titles = set()
+        result: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
+
+        for tid, arts in articles_by_topic.items():
+            for article in arts:
+                title = article.get("title", "").strip()
+                failed_reason = None
+
+                # 检查1: 重复
+                if title in seen_titles:
+                    failed_reason = "final_gate_duplicate"
+                # 检查2: 未拆分聚合
+                elif article.get("split_failed"):
+                    failed_reason = "final_gate_unsplit"
+                # 检查3: 强相关（topics 为空说明已被过滤，此处为保险）
+                elif not article.get("topics"):
+                    failed_reason = "final_gate_irrelevant"
+                # 检查4: 分类唯一
+                elif len(article.get("topics", [])) > 1:
+                    failed_reason = "final_gate_multi_topic"
+                # 检查5: T4 结构完整
+                elif tid == 4 and not self._t4_has_structure(article):
+                    failed_reason = "final_gate_t4_incomplete"
+
+                if failed_reason:
+                    deletion_log["final_gate"] = deletion_log.get("final_gate", 0) + 1
+                    continue
+
+                seen_titles.add(title)
+                result[tid].append(article)
+
+        removed = sum(len(arts) for arts in articles_by_topic.values()) - sum(len(a) for a in result.values())
+        print(f"   🔍 Final QA gate: removed {removed} articles")
+        return result
+
+    def _t4_has_structure(self, article: Dict) -> bool:
+        """T4 必须有时间和地点信息"""
+        has_date = bool(
+            article.get("exhibition_date") or
+            article.get("published_date") or
+            re.search(r"\d{4}[-/年]\d{1,2}", article.get("title", "") + article.get("summary", ""))
+        )
+        has_location = bool(
+            article.get("exhibition_location") or
+            re.search(r"(las vegas|berlin|barcelona|shanghai|shenzhen|beijing|上海|深圳|北京|广州|拉斯维加斯|柏林|巴塞罗那)",
+                      (article.get("title", "") + article.get("summary", "")).lower())
+        )
+        return has_date and has_location
+
+    # ------------------------------------------------------------------
     # 主输出方法
     # ------------------------------------------------------------------
 
@@ -65,12 +152,14 @@ class ReportGenerator:
         self,
         articles: List[Dict],
         dedup_stats: Dict = None,
-        raw_count: int = 0
+        raw_count: int = 0,
+        deletion_log: Dict[str, int] = None
     ) -> str:
         """
         生成符合企业标准的结构化 Markdown 日报。
-        包含：ALERTS / T1-T4各节 / 去重统计 / QA验证
+        包含：ALERTS / T1-T4各节 / 去重统计 / QA报告
         """
+        deletion_log = deletion_log or {}
         date_str = datetime.now().strftime("%Y-%m-%d")
         articles_by_topic = self._group_by_topic(articles)
 
@@ -80,12 +169,14 @@ class ReportGenerator:
 
         # ── ALERTS ──────────────────────────────────────────────────────
         lines.append("## 🚨 ALERTS（高优先级）")
+        lines.append("> 入选条件：必须满足以下 ≥2 项：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产")
+        lines.append("")
         alerts = self._collect_alerts(articles_by_topic)
         if alerts:
             for alert in alerts:
                 lines.append(f"- {alert}")
         else:
-            lines.append("- 今日无高优先级警报")
+            lines.append("- 今日无符合双条件的高优先级警报")
         lines.append("")
         lines.append("---")
         lines.append("")
@@ -123,19 +214,36 @@ class ReportGenerator:
         lines.append("---")
         lines.append("")
 
-        # ── QA验证 ──────────────────────────────────────────────────────
+        # ── QA报告 ──────────────────────────────────────────────────────
+        lines.append("## 🔍 QA报告")
+        lines.append("")
+        total_deleted = sum(deletion_log.values())
+        lines.append(f"- **删除新闻总数**：{total_deleted}")
+        lines.append(f"- **删除原因分布**：")
+        lines.append(f"  - 不相关（过滤）：{deletion_log.get('irrelevant', 0)}")
+        lines.append(f"  - 重复（URL/标题/语义）：{deletion_log.get('duplicate', 0) + deletion_log.get('semantic_duplicate', 0)}")
+        lines.append(f"  - 聚合无法拆分：{deletion_log.get('unsplit', 0)}")
+        lines.append(f"  - T4结构不完整：{deletion_log.get('t4_incomplete', 0)}")
+        lines.append(f"  - 最终清洗关卡：{deletion_log.get('final_gate', 0)}")
+        lines.append("")
+
+        # QA验证
         qa = self._perform_qa(articles_by_topic)
-        lines.append("## 🔍 QA验证")
-        dup_status = "通过" if qa["no_duplicates"] else f"未通过（发现 {qa['duplicate_count']} 条重复）"
-        lines.append(f"- 重复检测：{dup_status}")
-        lines.append(f"- 分类准确性：{qa['classification_note']}")
-        lines.append(f"- 数据完整性：{qa['completeness_note']}")
+        dup_status = "✅ 通过" if qa["no_duplicates"] else f"❌ 未通过（发现 {qa['duplicate_count']} 条重复）"
+        lines.append(f"- **重复检测**：{dup_status}")
+        lines.append(f"- **分类准确性**：{qa['classification_note']}")
+        lines.append(f"- **数据完整性**：{qa['completeness_note']}")
+
+        if qa.get("risk_points"):
+            lines.append(f"- **风险点**：")
+            for risk in qa["risk_points"]:
+                lines.append(f"  - {risk}")
         lines.append("")
 
         return "\n".join(lines)
 
     def generate_markdown(self, articles: List[Dict], stats: Dict = None) -> str:
-        """向后兼容接口，调用 generate_structured_markdown"""
+        """向后兼容接口"""
         raw_count = stats.get("total_before", len(articles)) if stats else len(articles)
         return self.generate_structured_markdown(articles, stats, raw_count)
 
@@ -150,15 +258,13 @@ class ReportGenerator:
         date_display = datetime.now().strftime("%B %d, %Y")
         articles_by_topic = self._group_by_topic(articles)
 
-        # Alerts
         alerts = self._collect_alerts(articles_by_topic)
         alerts_html = "".join(
             f'<div class="alert-item"><span class="alert-badge">🔴 HIGH</span>'
             f'<span class="alert-text">{self._escape_html(a)}</span></div>'
             for a in alerts[:8]
-        ) or '<div class="alert-item">今日无高优先级警报</div>'
+        ) or '<div class="alert-item">今日无符合双条件的高优先级警报</div>'
 
-        # Topic sections
         topic_html_parts = []
         for tid in range(1, 5):
             topic_articles = articles_by_topic.get(tid, [])
@@ -217,7 +323,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
 <div class="container">
   <div class="header">
     <h1>📰 三星产业情报日报</h1>
-    <div class="date">{date_display} · 严格分类 T1-T4 · 三层去重</div>
+    <div class="date">{date_display} · 严格分类 T1-T4 · 单一归属 · 三层去重</div>
   </div>
   <div class="stats-bar">
     <div class="stat-item"><div class="stat-number">{total}</div><div class="stat-label">今日新闻</div></div>
@@ -225,12 +331,12 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
     <div class="stat-item"><div class="stat-number">T1–T4</div><div class="stat-label">四大栏目</div></div>
   </div>
   <div class="alerts-section">
-    <div class="alerts-title">🚨 ALERTS — 今日高优先级情报</div>
+    <div class="alerts-title">🚨 ALERTS — 今日高优先级情报（≥2条判断维度）</div>
     {alerts_html}
   </div>
   {''.join(topic_html_parts)}
   <div class="footer">
-    🤖 Samsung CE Intelligence System · 低幻觉 · 强验证 · 可解释 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    🤖 Samsung CE Intelligence System v6.0 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
   </div>
 </div>
 </body>
@@ -249,59 +355,80 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
         return result
 
     def _collect_alerts(self, articles_by_topic: Dict[int, List[Dict]]) -> List[str]:
-        """收集高优先级警报（不重复）"""
+        """
+        收集高优先级警报。
+        必须满足 ≥2 个维度：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产
+        """
         alerts = []
         seen = set()
         for tid in range(1, 5):
             for article in articles_by_topic.get(tid, []):
-                if self._determine_impact(article, tid) == "high":
-                    title = article.get("title", "")
-                    if title not in seen:
-                        seen.add(title)
-                        source = article.get("source", "")
-                        alerts.append(f"[T{tid}] {title}（{source}）")
+                title = article.get("title", "")
+                if title in seen:
+                    continue
+                if self._count_alert_criteria(article) >= 2:
+                    seen.add(title)
+                    source = article.get("source", "")
+                    alerts.append(f"[T{tid}] {title}（{source}）")
         return alerts[:10]
 
+    def _count_alert_criteria(self, article: Dict) -> int:
+        """计算满足的 ALERTS 维度数量"""
+        text = (article.get("title", "") + " " + article.get("summary", "")).lower()
+        count = 0
+        for criterion, keywords in self.ALERT_CRITERIA.items():
+            if any(kw.lower() in text for kw in keywords):
+                count += 1
+        return count
+
     def _format_article_md(self, article: Dict, topic_id: int) -> List[str]:
-        """格式化单条新闻为 Markdown 块"""
+        """
+        格式化单条新闻为企业标准 Markdown 块：
+        【标题】
+        - 来源：
+        - 时间：
+        - 分类：
+        - 摘要（只包含一个事件）
+        """
         title       = article.get("title", "无标题")
         source      = article.get("source", "未知来源")
         link        = article.get("link", article.get("url", "#"))
         summary     = article.get("summary", article.get("content", ""))
         pub_date    = self._format_date(article.get("published_date"))
         unreliable  = article.get("source_unreliable", False)
+        topic_name  = self.TOPIC_NAMES.get(topic_id, f"T{topic_id}")
 
         lines = []
 
-        # T1 特殊：加产品类别标签
+        # T1 加产品类别标签
         if topic_id == 1:
             cat = article.get("product_category", "产品")
-            title_display = f"[{cat}] {title}"
+            display_title = f"[{cat}] {title}"
         else:
-            title_display = title
+            display_title = title
 
-        reliability_note = "⚠️ 来源不确定" if unreliable else ""
+        source_note = f" ⚠️ 来源待核实" if unreliable else ""
 
-        lines.append(f"### {title_display}")
-        lines.append(f"**来源**: {source} {reliability_note}  ")
-        lines.append(f"**发布时间**: {pub_date}  ")
-        lines.append(f"**原始链接**: [{link}]({link})  ")
+        lines.append(f"### 【{display_title}】")
+        lines.append(f"- **来源**：[{source}{source_note}]({link})")
+        lines.append(f"- **时间**：{pub_date}")
+        lines.append(f"- **分类**：T{topic_id} {topic_name}")
 
         if summary:
             clean = summary.strip()[:400].replace("\n", " ")
-            lines.append(f"**摘要**: {clean}")
+            lines.append(f"- **摘要**：{clean}")
 
-        # T4 特殊：展会时间/地点
+        # T4 展会附加信息
         if topic_id == 4:
             ex_time = article.get("exhibition_date", "")
             ex_loc  = article.get("exhibition_location", "")
             ex_url  = article.get("exhibition_website", "")
-            if ex_time or ex_loc:
-                lines.append(f"**时间**: {ex_time or '待确认'}  ")
-                lines.append(f"**地点**: {ex_loc or '待确认'}  ")
-                lines.append(f"**参展商名单**: {ex_url or '未找到'}  ")
-            else:
-                lines.append("⚠️ 展会时间/地点信息不完整，请核实后补充")
+            if ex_time:
+                lines.append(f"- **展会时间**：{ex_time}")
+            if ex_loc:
+                lines.append(f"- **展会地点**：{ex_loc}")
+            if ex_url:
+                lines.append(f"- **参展商名单**：{ex_url}")
 
         lines.append("")
         return lines
@@ -400,27 +527,37 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
     def _perform_qa(self, articles_by_topic: Dict[int, List[Dict]]) -> Dict:
         all_titles = []
         missing_source = 0
+        multi_topic_count = 0
+        risk_points = []
+
         for tid, arts in articles_by_topic.items():
             for a in arts:
                 all_titles.append(a.get("title", ""))
                 if not a.get("source") or a.get("source") == "unknown":
                     missing_source += 1
+                if len(a.get("topics", [])) > 1:
+                    multi_topic_count += 1
 
         unique_titles = set(all_titles)
         duplicate_count = len(all_titles) - len(unique_titles)
 
-        classification_note = "T1-T4 严格规则已执行；品牌标签已附加；T2排除品牌竞争内容"
+        classification_note = "T1-T4 严格规则已执行；单一归属原则已强制"
         if duplicate_count > 0:
-            classification_note += f"（发现 {duplicate_count} 条跨栏目重复，需检查去重逻辑）"
+            classification_note += f"（⚠️ 仍有 {duplicate_count} 条标题重复）"
+            risk_points.append(f"发现 {duplicate_count} 条重复标题，建议检查语义去重阈值")
+        if multi_topic_count > 0:
+            risk_points.append(f"{multi_topic_count} 条新闻仍有多 topic 标签，单一归属未完全生效")
 
         if missing_source == 0:
-            completeness_note = f"所有新闻均有来源；共 {len(all_titles)} 条"
+            completeness_note = f"✅ 所有新闻均有来源；共 {len(all_titles)} 条"
         else:
-            completeness_note = f"共 {len(all_titles)} 条，其中 {missing_source} 条来源缺失，已标注"
+            completeness_note = f"⚠️ 共 {len(all_titles)} 条，其中 {missing_source} 条来源缺失"
+            risk_points.append(f"{missing_source} 条新闻来源不明，情报可信度存疑")
 
         return {
             "no_duplicates": duplicate_count == 0,
             "duplicate_count": duplicate_count,
             "classification_note": classification_note,
-            "completeness_note": completeness_note
+            "completeness_note": completeness_note,
+            "risk_points": risk_points
         }

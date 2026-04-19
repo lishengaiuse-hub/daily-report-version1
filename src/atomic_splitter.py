@@ -44,7 +44,7 @@ class AtomicSplitter:
     MIN_ARTICLE_LENGTH = 50
 
     def __init__(self):
-        self.stats = {"input": 0, "split": 0, "output": 0}
+        self.stats = {"input": 0, "split": 0, "output": 0, "deleted_unsplit": 0}
 
     def is_aggregate(self, title: str, content: str = "") -> bool:
         """判断是否为聚合新闻"""
@@ -76,11 +76,9 @@ class AtomicSplitter:
         # 聚合新闻：强制拆分
         segments = self._split_content(content)
         if len(segments) <= 1:
-            # 无法拆分 → 标记为聚合，保留原文
-            article["is_aggregate"] = True
-            article["split_failed"] = True
-            self.stats["output"] += 1
-            return [article]
+            # 无法拆分 → 直接删除（不保留聚合原文）
+            self.stats["deleted_unsplit"] += 1
+            return []
 
         self.stats["split"] += 1
         atoms = self._build_atomic_articles(segments, article)
@@ -178,10 +176,11 @@ class AtomicSplitter:
             result.extend(self.split_article(article))
 
         print(f"✂️ Atomic Splitter: {self.stats['input']} in → {self.stats['output']} out "
-              f"({self.stats['split']} aggregates split)")
+              f"({self.stats['split']} aggregates split, {self.stats['deleted_unsplit']} unsplit deleted)")
 
-        self.stats = {"input": 0, "split": 0, "output": 0}
-        return result
+        deleted = self.stats["deleted_unsplit"]
+        self.stats = {"input": 0, "split": 0, "output": 0, "deleted_unsplit": 0}
+        return result, deleted
 
     def get_stats(self) -> Dict:
         return self.stats

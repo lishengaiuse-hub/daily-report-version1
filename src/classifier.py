@@ -242,8 +242,9 @@ class TopicClassifier:
 
     def cross_topic_deduplicate(self, articles_by_topic: Dict[int, List[Dict]]) -> Dict[int, List[Dict]]:
         """
-        跨栏目去重：同一新闻只保留优先级最高的 Topic。
+        跨栏目去重：同一新闻只保留优先级最高的 Topic（单一归属原则）。
         优先级: T1(4) > T2(3) > T3(2) > T4(1)
+        同时将 article["topics"] 更新为单一 topic，确保单一归属。
         """
         fingerprint_map: Dict[str, Tuple] = {}
         before_total = sum(len(a) for a in articles_by_topic.values())
@@ -261,11 +262,59 @@ class TopicClassifier:
         result: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
         for fp, (topic_id, article, _) in fingerprint_map.items():
             if topic_id in result:
+                # 强制单一归属：覆盖 topics 字段
+                article["topics"] = [topic_id]
                 result[topic_id].append(article)
 
         after_total = sum(len(a) for a in result.values())
         print(f"   🔄 Cross-topic dedup: {before_total} → {after_total} (removed {before_total - after_total})")
         return result
+
+    def semantic_deduplicate(self, articles: List[Dict]) -> Tuple[List[Dict], int]:
+        """
+        语义级去重：删除描述同一事件的重复新闻（即使表述不同）。
+        使用标题关键词 Jaccard 相似度，阈值 0.55。
+        返回 (去重后列表, 删除数量)
+        """
+        SIMILARITY_THRESHOLD = 0.55
+
+        def tokenize(text: str) -> set:
+            text = re.sub(r"[^\w\s]", " ", text.lower())
+            tokens = set(text.split())
+            stopwords = {"the", "a", "an", "is", "in", "of", "and", "to", "for",
+                         "on", "at", "by", "with", "as", "its", "it", "are", "be",
+                         "has", "will", "that", "this", "from", "was"}
+            return tokens - stopwords
+
+        def jaccard(s1: set, s2: set) -> float:
+            if not s1 or not s2:
+                return 0.0
+            intersection = len(s1 & s2)
+            union = len(s1 | s2)
+            return intersection / union if union else 0.0
+
+        kept: List[Dict] = []
+        removed = 0
+        token_cache: List[set] = []
+
+        for article in articles:
+            title = article.get("title", "")
+            summary = article.get("summary", "")[:200]
+            tokens = tokenize(title + " " + summary)
+
+            is_duplicate = False
+            for existing_tokens in token_cache:
+                if jaccard(tokens, existing_tokens) >= SIMILARITY_THRESHOLD:
+                    is_duplicate = True
+                    break
+
+            if is_duplicate:
+                removed += 1
+            else:
+                kept.append(article)
+                token_cache.append(tokens)
+
+        return kept, removed
 
     # ------------------------------------------------------------------
     # 内部分类逻辑
