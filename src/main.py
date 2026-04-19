@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Samsung CE Intelligence System - Main Orchestrator
-Version: 4.0 - 原子化拆分 + 原始来源追溯 + 跨栏目去重 + 严格分类
+Version: 4.1 - 集成Google News主动搜索 + RSS Fallback
 """
 
 import os
@@ -14,7 +14,6 @@ from pathlib import Path
 from collections import defaultdict
 from typing import List, Dict, Optional, Any, Tuple
 
-# Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from crawler import ArticleFetcher
@@ -26,17 +25,17 @@ from classifier import TopicClassifier
 from summarizer import ArticleSummarizer
 from reporter import ReportGenerator
 from mailer import EmailSender
+from google_news_fetcher import GoogleNewsFetcher, TOPIC_SEARCH_KEYWORDS
 
 
 class SamsungIntelligenceSystem:
-    """Main orchestration class with full pipeline"""
+    """Main orchestration class with Google News fallback"""
     
     def __init__(self, config_path: str = "config/config.yaml"):
         self.base_dir = Path(__file__).parent.parent
         self.config = self._load_config(config_path)
         self.start_time = datetime.now()
         
-        # 初始化各模块
         self.fetcher = ArticleFetcher(self.config)
         self.parser = ArticleParser()
         self.deduplicator = Deduplicator(
@@ -49,9 +48,9 @@ class SamsungIntelligenceSystem:
         self.summarizer = ArticleSummarizer(api_key=os.getenv("DEEPSEEK_API_KEY"))
         self.reporter = ReportGenerator(self.config)
         self.mailer = EmailSender(self.config.get('email', {}))
+        self.google_fetcher = GoogleNewsFetcher(self.fetcher.session)
     
     def _load_config(self, config_path: str) -> Dict:
-        """Load configuration from YAML file"""
         full_path = self.base_dir / config_path
         if full_path.exists():
             with open(full_path, 'r', encoding='utf-8') as f:
@@ -61,7 +60,6 @@ class SamsungIntelligenceSystem:
             return self._default_config()
     
     def _default_config(self) -> Dict:
-        """Default configuration if config file not found"""
         return {
             'sources': {'rss': {}, 'web_scraping': {}, 'firecrawl': {}, 'api': {}},
             'topics': {},
@@ -69,7 +67,6 @@ class SamsungIntelligenceSystem:
         }
     
     def _make_naive(self, dt: Optional[datetime]) -> Optional[datetime]:
-        """Convert datetime to naive (remove timezone info)"""
         if dt is None:
             return None
         if dt.tzinfo is not None:
@@ -77,7 +74,6 @@ class SamsungIntelligenceSystem:
         return dt
     
     def _get_reliability_score(self, source: str) -> float:
-        """Get reliability score based on source domain"""
         high_domains = [
             "reuters.com", "bloomberg.com", "wsj.com", "ft.com", "nikkei.com",
             "semiengineering.com", "digitimes.com", "ieee.org", "eetimes.com",
@@ -106,9 +102,8 @@ class SamsungIntelligenceSystem:
         return 0.70
     
     def run(self, dry_run: bool = False) -> Dict:
-        """Run the complete intelligence pipeline"""
         print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v4.0")
+        print("🔵 Samsung CE Intelligence System v4.1")
         print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
         
@@ -125,14 +120,14 @@ class SamsungIntelligenceSystem:
             # Step 2: 解析
             print("\n📝 Step 2: Parsing articles...")
             parsed_articles = self.parser.parse_batch(articles, days_back=3)
-            print(f"   ✅ Parsed {len(parsed_articles)} articles (filtered for recent days)")
+            print(f"   ✅ Parsed {len(parsed_articles)} articles")
             
             if not parsed_articles:
                 print("   ⚠️ No articles after parsing.")
                 return {'articles': [], 'stats': {}, 'report': None}
             
             # Step 3: 原子化拆分
-            print("\n🔪 Step 3: Atomic splitting (聚合新闻拆分)...")
+            print("\n🔪 Step 3: Atomic splitting...")
             atomic_articles = self.splitter.split_batch(parsed_articles)
             print(f"   ✅ After split: {len(atomic_articles)} atomic articles")
             
@@ -150,50 +145,87 @@ class SamsungIntelligenceSystem:
                 article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
             
             # 按Topic分组
-            articles_by_topic = defaultdict(list)
+            articles_by_topic = {tid: [] for tid in range(1, 6)}
             for article in traced_articles:
                 for topic_id in article.get('topics', []):
                     if 1 <= topic_id <= 5:
                         articles_by_topic[topic_id].append(article)
             
-            # 打印分布
             print("   📊 Initial topic distribution:")
             for tid in range(1, 6):
                 print(f"      Topic {tid}: {len(articles_by_topic[tid])} articles")
             
             self.classifier.print_stats()
             
-            # Step 6: 跨栏目去重
-            print("\n🔄 Step 6: Cross-topic deduplication...")
+            # Step 6: Topic Coverage Guarantee with Google News
+            print("\n🎯 Step 6: Topic Coverage Guarantee (Min 3 articles per topic)...")
+            
+            MIN_ARTICLES_PER_TOPIC = 3
+            topic_names = {
+                1: "Competitor Technology & Products",
+                2: "New Technologies / Components / Materials",
+                3: "Manufacturing Expansion (SEA / India)",
+                4: "Exhibitions",
+                5: "Supply Chain Risk"
+            }
+            
+            for topic_id in range(1, 6):
+                current_count = len(articles_by_topic[topic_id])
+                
+                if current_count < MIN_ARTICLES_PER_TOPIC:
+                    needed = MIN_ARTICLES_PER_TOPIC - current_count
+                    print(f"   ⚠️ Topic {topic_id} ({topic_names[topic_id]}) needs {needed} more articles")
+                    print(f"      🔍 Searching Google News for Topic {topic_id}...")
+                    
+                    keywords = TOPIC_SEARCH_KEYWORDS.get(topic_id, [])
+                    new_articles = self.google_fetcher.search_by_topic(topic_id, keywords, days_back=3)
+                    
+                    for article in new_articles[:needed + 2]:
+                        # 分类
+                        topics = self.classifier.classify(article['title'], article.get('summary', ''))
+                        if topic_id not in topics:
+                            topics.append(topic_id)
+                        
+                        article['topics'] = topics
+                        article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
+                        article['published_date'] = self.parser.parse_date(article.get('published_raw', ''))
+                        
+                        traced_articles.append(article)
+                        articles_by_topic[topic_id].append(article)
+                    
+                    final_count = len(articles_by_topic[topic_id])
+                    print(f"      ✅ Topic {topic_id} now has {final_count} articles")
+                else:
+                    print(f"   ✅ Topic {topic_id} ({topic_names[topic_id]}): {current_count} articles")
+            
+            # Step 7: 跨栏目去重
+            print("\n🔄 Step 7: Cross-topic deduplication...")
             articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
             
-            # 展平
             deduped_articles = []
             for articles in articles_by_topic.values():
                 deduped_articles.extend(articles)
             
             print(f"   ✅ After cross-topic dedup: {len(deduped_articles)} unique articles")
             
-            # Step 7: 标准去重 (URL + Title)
-            print("\n🔍 Step 7: Standard deduplication (URL + Title)...")
+            # Step 8: 标准去重
+            print("\n🔍 Step 8: Standard deduplication...")
             final_articles, dedup_stats = self.deduplicator.deduplicate(deduped_articles)
             print(f"   ✅ Before: {dedup_stats['total_before']} → After: {dedup_stats['total_after']}")
-            print(f"   🗑️ Removed: {dedup_stats['duplicates_removed']} duplicates")
             
-            # Step 8: AI摘要
-            print("\n✍️ Step 8: Generating AI summaries...")
+            # Step 9: AI摘要
+            print("\n✍️ Step 9: Generating AI summaries...")
             for article in final_articles[:50]:
                 if len(article.get('summary', '')) < 100:
                     article['summary'] = self.summarizer.summarize(
-                        article.get('title', ''), 
+                        article.get('title', ''),
                         article.get('content', article.get('summary', ''))
                     )
             print(f"   ✅ Summarized {min(50, len(final_articles))} articles")
             
-            # Step 9: 生成报告
-            print("\n📊 Step 9: Generating report...")
+            # Step 10: 生成报告
+            print("\n📊 Step 10: Generating report...")
             
-            # 最终统计
             final_counts = defaultdict(int)
             for article in final_articles:
                 for t in article.get('topics', []):
@@ -205,7 +237,6 @@ class SamsungIntelligenceSystem:
             
             report_html = self.reporter.generate_html(final_articles, dedup_stats)
             
-            # 保存报告
             output_dir = self.base_dir / "output"
             output_dir.mkdir(exist_ok=True)
             date_str = datetime.now().strftime('%Y%m%d')
@@ -216,22 +247,17 @@ class SamsungIntelligenceSystem:
             
             print(f"   ✅ Report saved: {html_path}")
             
-            # Step 10: 发送邮件
+            # Step 11: 发送邮件
             if not dry_run:
-                print("\n📧 Step 10: Sending email...")
-                print(f"   SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT SET')}")
-                print(f"   RECEIVER_EMAIL: {os.getenv('RECEIVER_EMAIL', 'NOT SET')}")
-                print(f"   SENDER_PASSWORD: {'✅ SET' if os.getenv('SENDER_PASSWORD') else '❌ NOT SET'}")
-                
+                print("\n📧 Step 11: Sending email...")
                 success = self.mailer.send(report_html, date_str)
                 if success:
                     print("   ✅ Email sent successfully!")
                 else:
                     print("   ❌ Failed to send email")
             else:
-                print("\n📧 Step 10: Skipping email (dry run mode)")
+                print("\n📧 Step 11: Skipping email (dry run mode)")
             
-            # 清理和总结
             self.deduplicator.close()
             
             elapsed = (datetime.now() - self.start_time).total_seconds()
@@ -239,6 +265,7 @@ class SamsungIntelligenceSystem:
             print(f"✅ System completed successfully in {elapsed:.1f} seconds")
             print("=" * 70)
             print("\n" + self.deduplicator.get_deduplication_report())
+            print(f"\n📊 Google News Stats: {self.google_fetcher.get_stats()}")
             
             return {'articles': final_articles, 'stats': dedup_stats}
             
@@ -250,7 +277,7 @@ class SamsungIntelligenceSystem:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v4.0")
+    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v4.1")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
     parser.add_argument("--test-email", action="store_true", help="Test email configuration only")
     parser.add_argument("--config", default="config/config.yaml", help="Config file path")
