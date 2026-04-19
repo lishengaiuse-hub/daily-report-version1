@@ -15,6 +15,13 @@ from bs4 import BeautifulSoup
 class OriginTracker:
     """追溯聚合新闻的原始来源"""
     
+    # 聚合网站域名列表
+    AGGREGATOR_DOMAINS = [
+        '36kr.com', 'ithome.com', 'leiphone.com', 'pingwest.com',
+        'cnbeta.com', 'technews.tw', 'news.google.com', 'toutiao.com',
+        'sohu.com', '163.com', 'ifeng.com', 'huanqiu.com'
+    ]
+    
     def __init__(self, session=None):
         self.session = session or requests.Session()
         self.session.headers.update({
@@ -41,6 +48,7 @@ class OriginTracker:
             if real_url:
                 article['original_url'] = real_url
                 article['trace_status'] = 'resolved'
+                article['source'] = urlparse(real_url).netloc
                 self.stats['traced'] += 1
                 return article
         
@@ -72,7 +80,7 @@ class OriginTracker:
         news_patterns = [
             r'/news/', r'/article/', r'/story/', r'/p/', 
             r'/a/', r'/post/', r'/content/', r'/read/',
-            r'/\d{4}/\d{2}/\d{2}/'
+            r'/\d{4}/\d{2}/\d{2}/', r'/detail/', r'/show/'
         ]
         for pattern in news_patterns:
             if re.search(pattern, url, re.IGNORECASE):
@@ -83,11 +91,7 @@ class OriginTracker:
         """判断是否为聚合页"""
         if not url:
             return False
-        aggregator_domains = [
-            '36kr.com', 'ithome.com', 'leiphone.com', 'pingwest.com',
-            'cnbeta.com', 'technews.tw', 'news.google.com'
-        ]
-        for domain in aggregator_domains:
+        for domain in self.AGGREGATOR_DOMAINS:
             if domain in url.lower():
                 return True
         return False
@@ -104,9 +108,13 @@ class OriginTracker:
                 ('a[rel="source"]', 'href'),
                 ('.source-link a', 'href'),
                 ('.original-link a', 'href'),
+                ('.article-source a', 'href'),
+                ('.reference a', 'href'),
                 ('a[href*="reuters"]', 'href'),
                 ('a[href*="bloomberg"]', 'href'),
                 ('a[href*="nikkei"]', 'href'),
+                ('a[href*="wsj"]', 'href'),
+                ('a[href*="ft.com"]', 'href'),
             ]
             
             for selector, attr in patterns:
@@ -127,4 +135,5 @@ class OriginTracker:
         return articles
     
     def get_stats(self) -> Dict:
+        """获取统计信息"""
         return self.stats
