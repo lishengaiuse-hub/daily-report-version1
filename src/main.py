@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Samsung CE Intelligence System - Main Orchestrator
-Version: 4.1 - 集成Google News主动搜索 + RSS Fallback
+Version: 5.0 - T1-T4严格分类 + QA验证 + 结构化Markdown输出
 """
 
 import os
@@ -29,50 +29,42 @@ from google_news_fetcher import GoogleNewsFetcher, TOPIC_SEARCH_KEYWORDS
 
 
 class SamsungIntelligenceSystem:
-    """Main orchestration class with Google News fallback"""
-    
+    """主调度类 - 执行完整的情报处理流水线"""
+
+    TOPIC_NAMES = {
+        1: "T1 竞品动态",
+        2: "T2 新技术/材料",
+        3: "T3 制造（SEA/India）",
+        4: "T4 行业展会"
+    }
+
     def __init__(self, config_path: str = "config/config.yaml"):
         self.base_dir = Path(__file__).parent.parent
         self.config = self._load_config(config_path)
         self.start_time = datetime.now()
-        
-        self.fetcher = ArticleFetcher(self.config)
-        self.parser = ArticleParser()
+
+        self.fetcher      = ArticleFetcher(self.config)
+        self.parser       = ArticleParser()
         self.deduplicator = Deduplicator(
             db_path=str(self.base_dir / "data/history.db"),
-            config=self.config.get('deduplication', {})
+            config=self.config.get("deduplication", {})
         )
-        self.splitter = AtomicSplitter()
-        self.tracker = OriginTracker()
-        self.classifier = TopicClassifier(self.config.get('topics', {}))
+        self.splitter   = AtomicSplitter()
+        self.tracker    = OriginTracker()
+        self.classifier = TopicClassifier(self.config.get("topics", {}))
         self.summarizer = ArticleSummarizer(api_key=os.getenv("DEEPSEEK_API_KEY"))
-        self.reporter = ReportGenerator(self.config)
-        self.mailer = EmailSender(self.config.get('email', {}))
+        self.reporter   = ReportGenerator(self.config)
+        self.mailer     = EmailSender(self.config.get("email", {}))
         self.google_fetcher = GoogleNewsFetcher(self.fetcher.session)
-    
+
     def _load_config(self, config_path: str) -> Dict:
         full_path = self.base_dir / config_path
         if full_path.exists():
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
-        else:
-            print(f"⚠️ Config file not found: {full_path}, using default config")
-            return self._default_config()
-    
-    def _default_config(self) -> Dict:
-        return {
-            'sources': {'rss': {}, 'web_scraping': {}, 'firecrawl': {}, 'api': {}},
-            'topics': {},
-            'email': {'smtp_host': 'smtp.gmail.com', 'smtp_port': 465, 'use_ssl': True}
-        }
-    
-    def _make_naive(self, dt: Optional[datetime]) -> Optional[datetime]:
-        if dt is None:
-            return None
-        if dt.tzinfo is not None:
-            return dt.replace(tzinfo=None)
-        return dt
-    
+        print(f"⚠️ Config not found: {full_path}, using defaults")
+        return {"sources": {}, "topics": {}, "email": {}}
+
     def _get_reliability_score(self, source: str) -> float:
         high_domains = [
             "reuters.com", "bloomberg.com", "wsj.com", "ft.com", "nikkei.com",
@@ -83,213 +75,206 @@ class SamsungIntelligenceSystem:
             "techcrunch.com", "theverge.com", "engadget.com", "gsmarena.com",
             "oled-info.com", "ithome.com", "36kr.com", "vietnam-briefing.com"
         ]
-        low_domains = [
-            "abnotebook.com", "leikeji.com", "abvr360.com", "aibangbots.com"
-        ]
-        
-        source_lower = source.lower()
-        
-        for domain in high_domains:
-            if domain in source_lower:
-                return 0.95
-        for domain in medium_domains:
-            if domain in source_lower:
-                return 0.80
-        for domain in low_domains:
-            if domain in source_lower:
-                return 0.60
-        
+        src = source.lower()
+        if any(d in src for d in high_domains):
+            return 0.95
+        if any(d in src for d in medium_domains):
+            return 0.80
         return 0.70
-    
+
     def run(self, dry_run: bool = False) -> Dict:
         print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v4.1")
+        print("🔵 Samsung CE Intelligence System v5.0")
         print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
-        
+
         try:
-            # Step 1: 抓取
+            # ── Step 1: 抓取 ────────────────────────────────────────────
             print("\n📡 Step 1: Fetching articles...")
-            articles = self.fetcher.fetch_all(self.config.get('sources', {}))
+            articles = self.fetcher.fetch_all(self.config.get("sources", {}))
             print(f"   ✅ Fetched {len(articles)} raw articles")
-            
             if not articles:
-                print("   ⚠️ No articles fetched. Check your sources.")
-                return {'articles': [], 'stats': {}, 'report': None}
-            
-            # Step 2: 解析
+                print("   ⚠️ No articles fetched.")
+                return {"articles": [], "stats": {}}
+
+            raw_count = len(articles)
+
+            # ── Step 2: 解析 ─────────────────────────────────────────────
             print("\n📝 Step 2: Parsing articles...")
-            parsed_articles = self.parser.parse_batch(articles, days_back=3)
-            print(f"   ✅ Parsed {len(parsed_articles)} articles")
-            
-            if not parsed_articles:
-                print("   ⚠️ No articles after parsing.")
-                return {'articles': [], 'stats': {}, 'report': None}
-            
-            # Step 3: 原子化拆分
-            print("\n🔪 Step 3: Atomic splitting...")
-            atomic_articles = self.splitter.split_batch(parsed_articles)
-            print(f"   ✅ After split: {len(atomic_articles)} atomic articles")
-            
-            # Step 4: 原始来源追溯
+            parsed = self.parser.parse_batch(articles, days_back=3)
+            print(f"   ✅ Parsed {len(parsed)} articles (3-day recency filter)")
+
+            # ── Step 3: 新闻原子化（强制执行）─────────────────────────────
+            print("\n✂️ Step 3: Atomic splitting (mandatory)...")
+            atomic = self.splitter.split_batch(parsed)
+            print(f"   ✅ After split: {len(atomic)} atomic articles")
+
+            # ── Step 4: 原始来源追溯 ─────────────────────────────────────
             print("\n🔗 Step 4: Origin tracking...")
-            traced_articles = self.tracker.trace_batch(atomic_articles)
-            
-            # Step 5: 严格分类
-            print("\n🏷️ Step 5: Strict classification...")
-            for article in traced_articles:
-                article['topics'] = self.classifier.classify(
-                    article.get('title', ''),
-                    article.get('summary', '')
+            traced = self.tracker.trace_batch(atomic)
+
+            # ── Step 5: 严格分类 + 强相关过滤 ─────────────────────────────
+            print("\n🏷️ Step 5: Strict classification (T1-T4, Samsung-relevance filter)...")
+            for article in traced:
+                topics = self.classifier.classify(
+                    article.get("title", ""),
+                    article.get("summary", "")
                 )
-                article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
-            
-            # 按Topic分组
-            articles_by_topic = {tid: [] for tid in range(1, 6)}
-            for article in traced_articles:
-                for topic_id in article.get('topics', []):
-                    if 1 <= topic_id <= 5:
-                        articles_by_topic[topic_id].append(article)
-            
-            print("   📊 Initial topic distribution:")
-            for tid in range(1, 6):
-                print(f"      Topic {tid}: {len(articles_by_topic[tid])} articles")
-            
-            self.classifier.print_stats()
-            
-            # Step 6: Topic Coverage Guarantee with Google News
-            print("\n🎯 Step 6: Topic Coverage Guarantee (Min 3 articles per topic)...")
-            
-            MIN_ARTICLES_PER_TOPIC = 3
-            topic_names = {
-                1: "Competitor Technology & Products",
-                2: "New Technologies / Components / Materials",
-                3: "Manufacturing Expansion (SEA / India)",
-                4: "Exhibitions",
-                5: "Supply Chain Risk"
-            }
-            
-            for topic_id in range(1, 6):
-                current_count = len(articles_by_topic[topic_id])
-                
-                if current_count < MIN_ARTICLES_PER_TOPIC:
-                    needed = MIN_ARTICLES_PER_TOPIC - current_count
-                    print(f"   ⚠️ Topic {topic_id} ({topic_names[topic_id]}) needs {needed} more articles")
-                    print(f"      🔍 Searching Google News for Topic {topic_id}...")
-                    
-                    keywords = TOPIC_SEARCH_KEYWORDS.get(topic_id, [])
-                    new_articles = self.google_fetcher.search_by_topic(topic_id, keywords, days_back=3)
-                    
-                    for article in new_articles[:needed + 2]:
-                        # 分类
-                        topics = self.classifier.classify(article['title'], article.get('summary', ''))
-                        if topic_id not in topics:
-                            topics.append(topic_id)
-                        
-                        article['topics'] = topics
-                        article['reliability_score'] = self._get_reliability_score(article.get('source', ''))
-                        article['published_date'] = self.parser.parse_date(article.get('published_raw', ''))
-                        
-                        traced_articles.append(article)
-                        articles_by_topic[topic_id].append(article)
-                    
-                    final_count = len(articles_by_topic[topic_id])
-                    print(f"      ✅ Topic {topic_id} now has {final_count} articles")
-                else:
-                    print(f"   ✅ Topic {topic_id} ({topic_names[topic_id]}): {current_count} articles")
-            
-            # Step 7: 跨栏目去重
-            print("\n🔄 Step 7: Cross-topic deduplication...")
-            articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
-            
-            deduped_articles = []
-            for articles in articles_by_topic.values():
-                deduped_articles.extend(articles)
-            
-            print(f"   ✅ After cross-topic dedup: {len(deduped_articles)} unique articles")
-            
-            # Step 8: 标准去重
-            print("\n🔍 Step 8: Standard deduplication...")
-            final_articles, dedup_stats = self.deduplicator.deduplicate(deduped_articles)
-            print(f"   ✅ Before: {dedup_stats['total_before']} → After: {dedup_stats['total_after']}")
-            
-            # Step 9: AI摘要
-            print("\n✍️ Step 9: Generating AI summaries...")
-            for article in final_articles[:50]:
-                if len(article.get('summary', '')) < 100:
-                    article['summary'] = self.summarizer.summarize(
-                        article.get('title', ''),
-                        article.get('content', article.get('summary', ''))
+                article["topics"] = topics
+                article["reliability_score"] = self._get_reliability_score(article.get("source", ""))
+
+                # 为 T1 附加产品类别标签
+                if 1 in topics:
+                    article["product_category"] = self.classifier.get_product_category(
+                        article.get("title", ""),
+                        article.get("summary", "")
                     )
-            print(f"   ✅ Summarized {min(50, len(final_articles))} articles")
-            
-            # Step 10: 生成报告
-            print("\n📊 Step 10: Generating report...")
-            
-            final_counts = defaultdict(int)
+
+            # 按 Topic 分组 (T1-T4)
+            articles_by_topic: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
+            for article in traced:
+                for tid in article.get("topics", []):
+                    if 1 <= tid <= 4:
+                        articles_by_topic[tid].append(article)
+
+            print("   📊 Initial topic distribution:")
+            for tid in range(1, 5):
+                print(f"      {self.TOPIC_NAMES[tid]}: {len(articles_by_topic[tid])} articles")
+
+            self.classifier.print_stats()
+
+            # ── Step 6: Google News 补充（Topic Coverage Guarantee）────────
+            print("\n🎯 Step 6: Topic Coverage Guarantee (min 3 per topic)...")
+            MIN_ARTICLES = 3
+            for tid in range(1, 5):
+                current = len(articles_by_topic[tid])
+                if current < MIN_ARTICLES:
+                    needed = MIN_ARTICLES - current
+                    print(f"   ⚠️ {self.TOPIC_NAMES[tid]} needs {needed} more → searching Google News...")
+                    keywords = TOPIC_SEARCH_KEYWORDS.get(tid, [])
+                    new_arts = self.google_fetcher.search_by_topic(tid, keywords, days_back=3)
+                    for art in new_arts[:needed + 2]:
+                        topics = self.classifier.classify(art["title"], art.get("summary", ""))
+                        if tid not in topics:
+                            topics.append(tid)
+                        art["topics"] = topics
+                        art["reliability_score"] = self._get_reliability_score(art.get("source", ""))
+                        art["published_date"] = self.parser.parse_date(art.get("published_raw", ""))
+                        if 1 in topics:
+                            art["product_category"] = self.classifier.get_product_category(
+                                art["title"], art.get("summary", "")
+                            )
+                        traced.append(art)
+                        articles_by_topic[tid].append(art)
+                    print(f"      ✅ {self.TOPIC_NAMES[tid]}: now {len(articles_by_topic[tid])} articles")
+                else:
+                    print(f"   ✅ {self.TOPIC_NAMES[tid]}: {current} articles")
+
+            # ── Step 7: 跨栏目去重（核心）────────────────────────────────
+            print("\n🔄 Step 7: Cross-topic deduplication (T1 > T2 > T3 > T4)...")
+            articles_by_topic = self.classifier.cross_topic_deduplicate(articles_by_topic)
+
+            deduped = []
+            for arts in articles_by_topic.values():
+                deduped.extend(arts)
+            print(f"   ✅ After cross-topic dedup: {len(deduped)} unique articles")
+
+            # ── Step 8: 标准去重（URL / 标题相似度 / 历史比对）──────────────
+            print("\n🔍 Step 8: Standard deduplication (URL + title fuzzy + history)...")
+            final_articles, dedup_stats = self.deduplicator.deduplicate(deduped)
+            print(f"   ✅ {dedup_stats.get('total_before', '?')} → {dedup_stats.get('total_after', '?')}")
+
+            # 重建 articles_by_topic 使用去重后文章
+            articles_by_topic = {1: [], 2: [], 3: [], 4: []}
             for article in final_articles:
-                for t in article.get('topics', []):
-                    final_counts[t] += 1
-            
-            print("   📊 Final topic distribution:")
-            for tid in range(1, 6):
-                print(f"      Topic {tid}: {final_counts[tid]} articles")
-            
-            report_html = self.reporter.generate_html(final_articles, dedup_stats)
-            
+                for tid in article.get("topics", []):
+                    if 1 <= tid <= 4:
+                        articles_by_topic[tid].append(article)
+
+            # ── Step 9: AI 摘要 ──────────────────────────────────────────
+            print("\n✍️ Step 9: Generating AI summaries...")
+            summarized = 0
+            for article in final_articles[:60]:
+                if not article.get("summary") or len(article.get("summary", "")) < 80:
+                    article["summary"] = self.summarizer.summarize(
+                        article.get("title", ""),
+                        article.get("content", article.get("summary", ""))
+                    )
+                    summarized += 1
+            print(f"   ✅ Summarized {summarized} articles")
+
+            # ── Step 10: 数据清洗 ─────────────────────────────────────────
+            print("\n🧹 Step 10: Data cleaning...")
+            for article in final_articles:
+                # 确保每条新闻结构统一
+                if not article.get("source") or article.get("source") == "unknown":
+                    article["source_unreliable"] = True
+                if not article.get("link") and not article.get("url"):
+                    final_articles.remove(article)
+            print(f"   ✅ Cleaned. Final count: {len(final_articles)}")
+
+            # ── Step 11: 生成报告 ─────────────────────────────────────────
+            print("\n📊 Step 11: Generating reports...")
             output_dir = self.base_dir / "output"
             output_dir.mkdir(exist_ok=True)
-            date_str = datetime.now().strftime('%Y%m%d')
+            date_str = datetime.now().strftime("%Y%m%d")
+
+            # Markdown 主报告（结构化）
+            md_report = self.reporter.generate_structured_markdown(
+                final_articles, dedup_stats, raw_count
+            )
+            md_path = output_dir / f"report_{date_str}.md"
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(md_report)
+            print(f"   ✅ Markdown report: {md_path}")
+
+            # HTML 报告（邮件用）
+            html_report = self.reporter.generate_html(final_articles, dedup_stats)
             html_path = output_dir / f"report_{date_str}.html"
-            
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(report_html)
-            
-            print(f"   ✅ Report saved: {html_path}")
-            
-            # Step 11: 发送邮件
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_report)
+            print(f"   ✅ HTML report: {html_path}")
+
+            # 打印最终分布
+            print("\n   📊 Final topic distribution:")
+            for tid in range(1, 5):
+                print(f"      {self.TOPIC_NAMES[tid]}: {len(articles_by_topic[tid])} articles")
+
+            # ── Step 12: 发送邮件 ─────────────────────────────────────────
             if not dry_run:
-                print("\n📧 Step 11: Sending email...")
-                success = self.mailer.send(report_html, date_str)
-                if success:
-                    print("   ✅ Email sent successfully!")
-                else:
-                    print("   ❌ Failed to send email")
+                print("\n📧 Step 12: Sending email...")
+                success = self.mailer.send(html_report, date_str)
+                print("   ✅ Email sent!" if success else "   ❌ Email failed")
             else:
-                print("\n📧 Step 11: Skipping email (dry run mode)")
-            
+                print("\n📧 Step 12: Skipped (dry-run mode)")
+
             self.deduplicator.close()
-            
+
             elapsed = (datetime.now() - self.start_time).total_seconds()
             print("\n" + "=" * 70)
-            print(f"✅ System completed successfully in {elapsed:.1f} seconds")
+            print(f"✅ Completed in {elapsed:.1f}s")
             print("=" * 70)
-            print("\n" + self.deduplicator.get_deduplication_report())
-            print(f"\n📊 Google News Stats: {self.google_fetcher.get_stats()}")
-            
-            return {'articles': final_articles, 'stats': dedup_stats}
-            
+
+            return {"articles": final_articles, "stats": dedup_stats}
+
         except Exception as e:
-            print(f"\n❌ System failed with error: {e}")
+            print(f"\n❌ System failed: {e}")
             import traceback
             traceback.print_exc()
-            return {'error': str(e)}
+            return {"error": str(e)}
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v4.1")
+    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v5.0")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
-    parser.add_argument("--test-email", action="store_true", help="Test email configuration only")
+    parser.add_argument("--test-email", action="store_true", help="Test email configuration")
     parser.add_argument("--config", default="config/config.yaml", help="Config file path")
     args = parser.parse_args()
-    
+
     system = SamsungIntelligenceSystem(config_path=args.config)
-    
+
     if args.test_email:
-        success = system.mailer.send_test_email()
-        sys.exit(0 if success else 1)
+        sys.exit(0 if system.mailer.send_test_email() else 1)
     else:
         result = system.run(dry_run=args.dry_run)
-        if result.get('error'):
-            sys.exit(1)
-        sys.exit(0)
+        sys.exit(1 if result.get("error") else 0)
