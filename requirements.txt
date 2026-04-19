@@ -1,29 +1,11 @@
-# Core HTTP & Web
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
-
-# RSS Parsing
 feedparser==6.0.10
-
-# Firecrawl - 动态网页抓取
-firecrawl-py==1.0.0
-
-# Deduplication (URL + Title only)
 rapidfuzz==3.5.2
-
-# Configuration
 pyyaml==6.0.1
-
-# Email
 secure-smtplib==0.1.1
-
-# Date parsing
 python-dateutil==2.8.2
-
-# LLM
 openai==0.28.1
-
-# Testing
 pytest==7.4.0
 pytest-cov==4.1.0
