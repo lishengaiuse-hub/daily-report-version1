@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Multi-method web crawler supporting RSS, HTTP, Firecrawl, and Topic-Specific Search
-Version: 3.0 - Includes topic coverage guarantee and active keyword search
+Version: 3.0 - 添加 RSS Fallback 机制
 """
 
 import re
@@ -10,6 +10,7 @@ import time
 import hashlib
 import feedparser
 import requests
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from urllib.parse import urlparse, urljoin
@@ -25,7 +26,7 @@ except ImportError:
 
 
 class ArticleFetcher:
-    """Fetch articles from multiple source types with topic-specific search"""
+    """Fetch articles from multiple source types with RSS fallback"""
     
     def __init__(self, config: Dict):
         self.config = config
@@ -55,19 +56,18 @@ class ArticleFetcher:
         self.results = []
     
     # =============================================
-    # RSS FETCHING
+    # RSS FETCHING WITH FALLBACK
     # =============================================
     
     def fetch_rss(self, url: str) -> List[Dict]:
-        """Fetch and parse RSS feed"""
+        """Fetch and parse RSS feed - 原始方法"""
         articles = []
         try:
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
             feed = feedparser.parse(response.content)
             
-            for entry in feed.entries[:30]:  # Limit per feed
-                # Get content with fallbacks
+            for entry in feed.entries[:30]:
                 summary = entry.get('summary', entry.get('description', ''))
                 content = entry.get('content', [{}])[0].get('value', summary)
                 
@@ -84,6 +84,128 @@ class ArticleFetcher:
                     articles.append(article)
         except Exception as e:
             print(f"  ⚠️ RSS fetch failed for {url}: {e}")
+        return articles
+    
+    def fetch_rss_with_fallback(self, url: str, source_name: str = "") -> List[Dict]:
+        """
+        带fallback的RSS抓取
+        方法1: 直接RSS
+        方法2: 尝试备用URL
+        方法3: Firecrawl (如果可用)
+        """
+        articles = []
+        
+        # 方法1: 直接RSS
+        try:
+            response = self.session.get(url, timeout=15)
+            feed = feedparser.parse(response.content)
+            if feed.entries:
+                for entry in feed.entries[:20]:
+                    article = {
+                        'title': self._clean_text(entry.get('title', '')),
+                        'summary': self._clean_text(entry.get('summary', '')[:500]),
+                        'content': '',
+                        'link': entry.get('link', ''),
+                        'published_raw': entry.get('published', ''),
+                        'source': urlparse(url).netloc,
+                        'fetch_method': 'rss'
+                    }
+                    if article['title'] and article['link']:
+                        articles.append(article)
+                return articles
+        except Exception as e:
+            print(f"     ⚠️ RSS failed for {source_name}: {e}")
+        
+        # 方法2: 尝试备用URL
+        backup_urls = self._get_backup_urls(url)
+        for backup_url in backup_urls:
+            try:
+                response = self.session.get(backup_url, timeout=15)
+                feed = feedparser.parse(response.content)
+                if feed.entries:
+                    for entry in feed.entries[:20]:
+                        article = {
+                            'title': self._clean_text(entry.get('title', '')),
+                            'summary': self._clean_text(entry.get('summary', '')[:500]),
+                            'content': '',
+                            'link': entry.get('link', ''),
+                            'published_raw': entry.get('published', ''),
+                            'source': urlparse(backup_url).netloc,
+                            'fetch_method': 'rss_fallback'
+                        }
+                        if article['title'] and article['link']:
+                            articles.append(article)
+                    print(f"     ✅ Fallback RSS success: {backup_url}")
+                    return articles
+            except:
+                continue
+        
+        # 方法3: Firecrawl (如果可用)
+        if self.firecrawl:
+            try:
+                result = self.firecrawl.scrape(url, formats=['markdown', 'links'])
+                if result and result.get('markdown'):
+                    articles = self._extract_articles_from_markdown(result['markdown'], url)
+                    print(f"     ✅ Firecrawl fallback success for {source_name}")
+                    return articles
+            except:
+                pass
+        
+        print(f"     ❌ All methods failed for {source_name}")
+        return articles
+    
+    def _get_backup_urls(self, original_url: str) -> List[str]:
+        """生成备用URL"""
+        backups = []
+        
+        # 常见RSS路径变体
+        if original_url.endswith('/feed'):
+            backups.append(original_url.replace('/feed', '/rss'))
+            backups.append(original_url.replace('/feed', '/feed.xml'))
+        elif original_url.endswith('/rss'):
+            backups.append(original_url.replace('/rss', '/feed'))
+            backups.append(original_url.replace('/rss', '/rss.xml'))
+        
+        # 添加根目录常见路径
+        from urllib.parse import urlparse
+        parsed = urlparse(original_url)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        backups.extend([
+            f"{base}/feed",
+            f"{base}/rss",
+            f"{base}/rss.xml",
+            f"{base}/feed.xml",
+            f"{base}/index.xml",
+            f"{base}/news/feed",
+            f"{base}/news/rss"
+        ])
+        
+        return list(set(backups))
+    
+    def _extract_articles_from_markdown(self, markdown: str, base_url: str) -> List[Dict]:
+        """从Markdown内容中提取文章"""
+        articles = []
+        lines = markdown.split('\n')
+        
+        for line in lines[:100]:
+            line = line.strip()
+            # 查找Markdown链接格式
+            link_match = re.search(r'\[([^\]]+)\]\(([^)]+)\)', line)
+            if link_match:
+                title = link_match.group(1)
+                link = link_match.group(2)
+                if len(title) > 10 and len(title) < 200:
+                    article = {
+                        'title': self._clean_text(title),
+                        'summary': '',
+                        'content': '',
+                        'link': urljoin(base_url, link),
+                        'published_raw': '',
+                        'source': urlparse(base_url).netloc,
+                        'fetch_method': 'firecrawl_markdown'
+                    }
+                    articles.append(article)
+        
         return articles
     
     # =============================================
@@ -123,7 +245,6 @@ class ArticleFetcher:
                     'fetch_method': 'webpage'
                 }
                 
-                # Extract date if selector provided
                 date_selector = source_config.get('date_selector')
                 if date_selector:
                     date_elem = item.select_one(date_selector)
@@ -139,139 +260,12 @@ class ArticleFetcher:
         return articles
     
     # =============================================
-    # FIRECRAWL (Dynamic JavaScript Sites)
-    # =============================================
-    
-    def fetch_with_firecrawl(self, url: str, source_name: str = "unknown", 
-                              wait_for: int = 3000, limit: int = 20) -> List[Dict]:
-        """
-        Fetch articles using Firecrawl - handles dynamic JavaScript content
-        
-        Args:
-            url: Target URL to scrape
-            source_name: Name of the source for logging
-            wait_for: Milliseconds to wait for page load
-            limit: Maximum number of articles to extract
-        
-        Returns:
-            List of article dictionaries
-        """
-        articles = []
-        
-        if not self.firecrawl:
-            print(f"  ⚠️ Firecrawl not available for {source_name}")
-            return articles
-        
-        try:
-            print(f"  🔥 Firecrawl scraping: {source_name} - {url[:60]}...")
-            
-            # Scrape with markdown format for clean content
-            scrape_result = self.firecrawl.scrape(
-                url,
-                formats=['markdown', 'links', 'html'],
-                options={
-                    'waitFor': wait_for,
-                    'timeout': 30000,
-                }
-            )
-            
-            if not scrape_result or not scrape_result.get('success'):
-                print(f"     ⚠️ Firecrawl scrape failed for {source_name}")
-                return articles
-            
-            # Extract content
-            markdown_content = scrape_result.get('markdown', '')
-            links = scrape_result.get('links', [])
-            
-            # Try to extract article titles from markdown content
-            title_patterns = [
-                r'^#\s+(.+)$',      # H1
-                r'^##\s+(.+)$',     # H2
-                r'^###\s+(.+)$',    # H3
-                r'^【(.+)】$',       # Chinese bracket format
-                r'^\[(.+)\]\(.+\)$' # Markdown link format
-            ]
-            
-            lines = markdown_content.split('\n')
-            potential_titles = []
-            
-            for line in lines[:100]:
-                line = line.strip()
-                if not line or len(line) < 5 or len(line) > 200:
-                    continue
-                
-                for pattern in title_patterns:
-                    match = re.match(pattern, line)
-                    if match:
-                        title = match.group(1).strip()
-                        if len(title) > 3 and len(title) < 150:
-                            potential_titles.append(title)
-                            break
-            
-            # Also extract from links that look like articles
-            article_links = []
-            for link in links[:limit]:
-                if self._is_article_link(link, url):
-                    article_links.append(link)
-            
-            # Build articles from extracted data
-            for i, title in enumerate(potential_titles[:limit]):
-                link = url
-                for article_link in article_links:
-                    if title.lower().replace(' ', '') in article_link.lower():
-                        link = article_link
-                        break
-                
-                article = {
-                    'title': self._clean_text(title),
-                    'summary': '',
-                    'content': '',
-                    'link': link,
-                    'published_raw': '',
-                    'source': urlparse(url).netloc,
-                    'fetch_method': 'firecrawl'
-                }
-                articles.append(article)
-            
-            # If no titles extracted, fall back to links
-            if not articles and article_links:
-                for link in article_links[:limit]:
-                    article = {
-                        'title': self._extract_title_from_url(link),
-                        'summary': '',
-                        'content': '',
-                        'link': link,
-                        'published_raw': '',
-                        'source': urlparse(url).netloc,
-                        'fetch_method': 'firecrawl'
-                    }
-                    articles.append(article)
-            
-            print(f"     ✅ Extracted {len(articles)} potential articles")
-            
-        except Exception as e:
-            print(f"  ❌ Firecrawl failed for {source_name}: {e}")
-        
-        return articles
-    
-    # =============================================
-    # TOPIC-SPECIFIC ACTIVE SEARCH (NEW)
+    # TOPIC-SPECIFIC ACTIVE SEARCH
     # =============================================
     
     def fetch_by_topic(self, topic_id: int, topic_sources: Dict[int, List[str]], 
                        topic_keywords: Dict[int, List[str]], days_back: int = 3) -> List[Dict]:
-        """
-        Actively fetch articles for a specific topic using keywords and sources
-        
-        Args:
-            topic_id: Topic ID (1-5)
-            topic_sources: Dictionary mapping topic_id to list of source domains
-            topic_keywords: Dictionary mapping topic_id to list of search keywords
-            days_back: Days to look back for news
-        
-        Returns:
-            List of articles for this topic
-        """
+        """Actively fetch articles for a specific topic using keywords and sources"""
         articles = []
         sources = topic_sources.get(topic_id, [])
         keywords = topic_keywords.get(topic_id, [])
@@ -279,10 +273,8 @@ class ArticleFetcher:
         print(f"     🔍 Active search for Topic {topic_id} with {len(keywords)} keywords...")
         
         # Method 1: Google News RSS search using keywords
-        for keyword in keywords[:8]:  # Limit to top 8 keywords
+        for keyword in keywords[:8]:
             encoded_keyword = requests.utils.quote(keyword)
-            
-            # Search for recent news
             search_urls = [
                 f"https://news.google.com/rss/search?q={encoded_keyword}&hl=en-US&gl=US&ceid=US:en",
                 f"https://news.google.com/rss/search?q={encoded_keyword}+after:{days_back}+days&hl=en-US"
@@ -292,19 +284,12 @@ class ArticleFetcher:
                 try:
                     feed = feedparser.parse(url)
                     for entry in feed.entries[:5]:
-                        # Check if article is recent
-                        published = entry.get('published', '')
-                        if published:
-                            pub_date = self._parse_date(published)
-                            if pub_date and (datetime.now() - pub_date).days > days_back:
-                                continue
-                        
                         article = {
                             'title': self._clean_text(entry.get('title', '')),
                             'summary': self._clean_text(entry.get('summary', '')[:500]),
                             'content': '',
                             'link': entry.get('link', ''),
-                            'published_raw': published,
+                            'published_raw': entry.get('published', ''),
                             'source': 'google_news_search',
                             'fetch_method': 'topic_search',
                             'search_keyword': keyword,
@@ -315,12 +300,11 @@ class ArticleFetcher:
                 except Exception as e:
                     print(f"       ⚠️ Google News search failed for '{keyword}': {e}")
             
-            time.sleep(0.3)  # Rate limiting
+            time.sleep(0.3)
         
         # Method 2: Direct source RSS fetching
         print(f"     📡 Checking {len(sources)} topic-specific sources...")
         for source_domain in sources[:10]:
-            # Try common RSS feed paths
             feed_urls = [
                 f"https://{source_domain}/feed",
                 f"https://{source_domain}/rss",
@@ -345,13 +329,13 @@ class ArticleFetcher:
                             }
                             if article['title'] and article['link'] and len(article['title']) > 10:
                                 articles.append(article)
-                        break  # Found working feed
+                        break
                 except Exception:
                     continue
             
             time.sleep(0.3)
         
-        # Remove duplicates within this batch
+        # Remove duplicates
         seen_titles = set()
         unique_articles = []
         for article in articles:
@@ -361,7 +345,7 @@ class ArticleFetcher:
                 unique_articles.append(article)
         
         print(f"     ✅ Found {len(unique_articles)} unique articles for Topic {topic_id}")
-        return unique_articles[:20]  # Limit per topic
+        return unique_articles[:20]
     
     # =============================================
     # API FETCHING
@@ -380,7 +364,6 @@ class ArticleFetcher:
             params = source_config.get('params', {})
             headers = source_config.get('headers', {})
             
-            # Merge with default headers
             request_headers = self.session.headers.copy()
             request_headers.update(headers)
             
@@ -392,7 +375,6 @@ class ArticleFetcher:
             response.raise_for_status()
             data = response.json()
             
-            # Handle different API response structures
             items = data.get('data', data.get('posts', data.get('articles', [])))
             if not items and isinstance(data, list):
                 items = data
@@ -421,20 +403,20 @@ class ArticleFetcher:
     # =============================================
     
     def fetch_all(self, sources: Dict) -> List[Dict]:
-        """Fetch from all configured sources"""
+        """Fetch from all configured sources with fallback"""
         all_articles = []
         
-        # RSS Feeds (priority 1)
+        # RSS Feeds (with fallback)
         print("📡 Fetching RSS feeds...")
         rss_sources = sources.get('rss', {})
         for category, urls in rss_sources.items():
             for url in urls:
                 print(f"  📰 RSS: {url[:60]}...")
-                articles = self.fetch_rss(url)
+                articles = self.fetch_rss_with_fallback(url, category)
                 all_articles.extend(articles)
                 time.sleep(0.5)
         
-        # Web Scraping (priority 2)
+        # Web Scraping
         print("🕸️  Fetching web pages...")
         web_sources = sources.get('web_scraping', {})
         for name, config in web_sources.items():
@@ -445,7 +427,7 @@ class ArticleFetcher:
                 all_articles.extend(articles)
                 time.sleep(1)
         
-        # Firecrawl Sources (priority 2.5 - for dynamic sites)
+        # Firecrawl Sources
         if self.firecrawl:
             print("🔥 Fetching with Firecrawl...")
             firecrawl_sources = sources.get('firecrawl', {})
@@ -453,18 +435,14 @@ class ArticleFetcher:
                 url = config.get('url', '')
                 if url:
                     print(f"  🔥 {name}: {url[:60]}...")
-                    articles = self.fetch_with_firecrawl(
-                        url=url,
-                        source_name=name,
-                        wait_for=config.get('wait_for', 3000),
-                        limit=config.get('limit', 15)
-                    )
+                    # 使用带fallback的RSS方法，但传入Firecrawl作为备用
+                    articles = self.fetch_rss_with_fallback(url, name)
                     all_articles.extend(articles)
                     time.sleep(2)
         else:
             print("🔥 Firecrawl not available - skipping dynamic sites")
         
-        # API Sources (priority 3)
+        # API Sources
         print("🔌 Fetching APIs...")
         api_sources = sources.get('api', {})
         for name, config in api_sources.items():
@@ -486,11 +464,8 @@ class ArticleFetcher:
         """Clean HTML and normalize text"""
         if not text:
             return ""
-        # Remove HTML tags
         text = re.sub(r'<.*?>', '', text)
-        # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text)
-        # Remove special characters (keep basic punctuation)
         text = re.sub(r'[^\w\s\u4e00-\u9fff\-\.\,\!\?\(\)\[\]\:\;\"\']', ' ', text)
         return text.strip()
     
@@ -504,75 +479,3 @@ class ArticleFetcher:
                 elif isinstance(value, dict) and 'rendered' in value:
                     return self._clean_text(value['rendered'])
         return ""
-    
-    def _is_article_link(self, link: str, base_url: str) -> bool:
-        """Determine if a URL looks like an article link"""
-        if not link or not link.startswith('http'):
-            return False
-        
-        # Exclude common non-article paths
-        exclude_patterns = [
-            '/tag/', '/category/', '/author/', '/page/', 
-            '/search', '/login', '/register', '/about',
-            '/contact', '/privacy', '/terms', '.css', '.js',
-            '.jpg', '.png', '.gif', '.pdf'
-        ]
-        
-        for pattern in exclude_patterns:
-            if pattern in link.lower():
-                return False
-        
-        # Include patterns that suggest article content
-        include_patterns = [
-            '/news/', '/article/', '/post/', '/p/', 
-            '/story/', '/content/', '/read/', '/detail/',
-            '/a/', '/2026/', '/2025/'
-        ]
-        
-        for pattern in include_patterns:
-            if pattern in link.lower():
-                return True
-        
-        # If link is from same domain and has reasonable length
-        if base_url in link and len(link.split('/')) >= 4:
-            return True
-        
-        return False
-    
-    def _extract_title_from_url(self, url: str) -> str:
-        """Extract a readable title from URL"""
-        # Remove protocol and domain
-        path = url.replace('https://', '').replace('http://', '')
-        path = path.split('/', 1)[-1] if '/' in path else path
-        
-        # Remove extension
-        path = re.sub(r'\.[^/.]+$', '', path)
-        
-        # Replace separators with spaces
-        title = re.sub(r'[-_/]', ' ', path)
-        
-        # Capitalize words
-        words = title.split()
-        title = ' '.join(words[:8])
-        
-        return title[:100] if title else "Article"
-    
-    def _parse_date(self, date_string: str) -> Optional[datetime]:
-        """Parse date string to datetime"""
-        if not date_string:
-            return None
-        
-        try:
-            # Try common RSS date formats
-            from email.utils import parsedate_to_datetime
-            return parsedate_to_datetime(date_string)
-        except:
-            pass
-        
-        try:
-            from dateutil import parser
-            return parser.parse(date_string)
-        except:
-            pass
-        
-        return None
