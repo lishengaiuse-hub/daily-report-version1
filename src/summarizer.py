@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Article Summarizer for Samsung CE Intelligence
-Version: 5.0 - 三星情报导向摘要（中文输出 + 低幻觉）
+Article Summarizer for CE Intelligence
+Version: 5.0 - 情报导向摘要（中文输出 + 低幻觉）
 """
 
 import os
@@ -12,19 +12,19 @@ import openai
 
 
 class ArticleSummarizer:
-    """为三星情报日报生成高质量中文摘要"""
+    """为消费电子情报日报生成高质量中文摘要"""
 
-    SYSTEM_PROMPT = """你是三星电子消费电子战略采购部的高级情报分析师。
+    SYSTEM_PROMPT = """你是消费电子行业资深情报分析师。
 你的任务是将新闻内容提炼为2-3句简洁专业的中文情报摘要（总字数50-100字）。
 
 输出规范：
 - 直接陈述事实，不使用"总结："、"该文章表明"等开头语
-- 必须包含：关键主体（公司/产品/技术名称）、核心事件、对三星的潜在影响
+- 必须包含：关键主体（公司/产品/技术名称）、核心事件、行业影响
 - 若来源不确定或信息不足，请标注"（信息待核实）"
 - 不添加原文中没有的信息（低幻觉原则）
 - 输出中文
 
-格式：[核心事件]. [具体数据/细节]. [对三星的影响/启示].
+格式：[核心事件]. [具体数据/细节]. [行业影响/启示].
 """
 
     def __init__(self, api_key: Optional[str] = None):
