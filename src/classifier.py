@@ -220,12 +220,14 @@ class TopicClassifier:
     # T4: 材料/技术白名单（必须命中才进入 Topic4）
     # ──────────────────────────────────────────────
     MATERIAL_KEYWORDS = [
-        # 显示材料/技术
-        "oled material", "oled panel", "oled stack",
+        # 显示材料/面板技术（扩大覆盖）
+        "oled material", "oled panel", "oled stack", "oled display panel",
+        "amoled", "ltps panel", "ltpo panel", "display panel technology",
         "microled", "micro-led", "micro led",
         "miniled", "mini-led", "mini led",
         "qd-oled", "quantum dot material", "display stack", "display material",
         "micro oled", "transparent display panel", "flexible display panel",
+        "display supply", "panel supply", "screen technology", "display technology",
         # 电池材料/技术
         "solid state battery", "solid-state battery", "silicon anode",
         "silicon carbon battery", "energy density breakthrough",
@@ -316,10 +318,33 @@ class TopicClassifier:
         "llm model", "foundation model", "large language model",
         "ai platform", "ai ecosystem", "generative ai platform",
         "ai chatbot", "ai chat app", "ai assistant app", "chatbot release",
+        "ai model has", "new ai model", "ai reasoning", "ai promises",
         "software update", "os update", "firmware update",
         "android update", "ios update", "app store news",
         "cloud computing", "saas platform",
+        "messaging app", "standalone app", "now on the app store",
+        "available on the app store", "digital id feature", "wallet app",
         "软件更新", "系统更新", "固件升级", "生态系统", "AI聊天", "AI助手应用",
+        "AI大模型", "大语言模型",
+        # 流媒体/娱乐内容（Apple TV+等）
+        "apple tv+", "streaming service", "tv show", "tv series", "tv comedy",
+        "tv drama", "streaming content", "original series", "new comedy",
+        "new series", "movie premiere", "film review",
+        "流媒体", "电视剧", "综艺", "电影首映", "剧集",
+        # 生活方式/人物专访/社论
+        "lifestyle", "人物专访", "建筑设计师", "阅读清单", "碎片时间",
+        "低头是", "抬头是", "散步", "街道上", "城市空间",
+        # 食品/餐饮/非CE内容
+        "食品安全", "餐饮", "网络餐饮", "食品案例", "鸭肉", "牛肉",
+        "幽灵外卖", "过期原料", "food safety", "restaurant review",
+        # CSR/环保/公关（无产品）
+        "coral reef", "environmental initiative", "sustainability initiative",
+        "csr initiative", "receives award", "international recognition",
+        "environmental award", "green initiative",
+        "珊瑚礁", "环保倡议", "社会责任", "获奖", "荣获",
+        # 观点/评论/社论
+        "commentary:", "opinion:", "editorial:", "column:", "analysis:",
+        "gets the worst", "is a glimpse into",
         # 论坛/会议/路演
         "webinar", "symposium", "industry forum", "investor day",
         "路演", "项目路演", "investor pitch", "startup pitch",
