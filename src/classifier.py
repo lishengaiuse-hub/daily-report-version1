@@ -59,31 +59,51 @@ class TopicClassifier:
         "laptop", "notebook", "笔记本",
         "tablet", "平板",
         "wearable", "smartwatch", "可穿戴", "智能手表",
-        "earphone", "earbuds", "headphone", "耳机",
+        "earphone", "earbuds", "headphone", "airpods", "耳机",
         "speaker", "soundbar", "音箱",
         "digital device", "数码产品",
         "phone assembly", "手机组装",
         "appliance manufacturing", "家电制造",
         "electronics assembly", "电子组装",
         "electronics manufacturing", "电子制造",
-        "foxconn", "富士康", "pegatron", "wistron", "compal",  # 已知CE代工厂
-        "boe", "lg display", "samsung display",  # 显示厂（CE关联）
-        "iphone", "galaxy", "xiaomi", "huawei", "oppo", "vivo"
+        # 已知CE代工厂 / OEM品牌（品牌名本身即代表CE相关）
+        "foxconn", "富士康", "pegatron", "wistron", "compal", "luxshare",
+        "boe", "lg display", "samsung display", "csot", "tianma",
+        "samsung", "apple", "google", "microsoft",
+        "lg electronics", "lg appliance", "sony electronics", "panasonic",
+        "sharp electronics", "toshiba", "hitachi",
+        "iphone", "galaxy", "pixel", "surface",
+        "xiaomi", "huawei", "oppo", "vivo", "honor",
+        # 组件/供应链（CE专属）
+        "display panel", "面板", "oled panel", "touch panel",
+        "camera module", "battery pack", "phone battery"
     ]
 
     # ──────────────────────────────────────────────
     # T1: 现有工厂扩产关键词（不包含新建）
     # ──────────────────────────────────────────────
     EXPANSION_KEYWORDS = [
-        "expand", "expansion", "expanding", "扩产", "扩建", "扩大",
-        "increase capacity", "additional capacity", "产能扩大", "产能增加",
-        "boost production", "ramp up", "scale up", "产能提升",
-        "invest in existing", "upgrade facility", "升级产线",
-        "additional investment", "追加投资", "增资",
-        "production ramp", "产能爬坡",
-        "capacity increase", "capacity expansion",
-        "add production line", "新增产线",
-        "double capacity", "triple capacity", "产能翻倍"
+        # EN — explicit expansion
+        "expand", "expansion", "expanding", "expanded",
+        "increase capacity", "additional capacity", "capacity increase", "capacity expansion",
+        "boost production", "boost capacity", "boosts production", "boosts capacity",
+        "ramp up", "ramp up production", "ramps up", "ramping up",
+        "scale up", "scale up production", "scale production",
+        "scales up", "scaling up", "stepped up", "step up production",
+        "increase production", "increasing production", "increase manufacturing",
+        "production capacity", "manufacturing capacity",   # 明确提到产能（配合SEA+CE上下文）
+        "accelerates investment", "accelerate production", "accelerating investment",
+        "invest in existing", "additional investment", "increasing investment",
+        "upgrade facility", "upgrade production",
+        "add production line", "add assembly line",
+        "double capacity", "triple capacity", "lift production",
+        "increase output", "higher output", "increase allocation",
+        "strengthens presence", "deepens investment",
+        # CN
+        "扩产", "扩建", "扩大", "产能扩大", "产能增加", "产能提升",
+        "追加投资", "增资", "扩大投资", "加大投资",
+        "产能爬坡", "新增产线", "产能翻倍", "增加产线",
+        "提升产能", "加速投资", "深化投资"
     ]
 
     # T1 中需排除的"新建"特征词（有这些 → 应去 T2 而非 T1）
@@ -91,21 +111,32 @@ class TopicClassifier:
         "new factory", "new plant", "new facility", "new manufacturing",
         "groundbreaking", "break ground", "奠基", "开工", "新建", "新工厂",
         "construction of", "build a factory", "set up factory",
-        "establish factory", "首个工厂", "新厂"
+        "establish factory", "首个工厂", "新厂", "first factory in",
+        "brand new plant", "greenfield"
     ]
 
     # ──────────────────────────────────────────────
     # T2: 新建工厂关键词
     # ──────────────────────────────────────────────
     NEW_FACTORY_KEYWORDS = [
-        "new factory", "new plant", "new facility", "新工厂", "新建工厂",
-        "groundbreaking", "break ground", "奠基", "开工", "兴建",
-        "construction of factory", "build factory", "建厂",
+        # EN
+        "new factory", "new plant", "new facility", "new manufacturing facility",
+        "groundbreaking", "break ground", "breaks ground", "broke ground", "greenfield",
+        "construction of factory", "build factory", "building factory",
         "set up manufacturing", "establish manufacturing",
-        "greenfield", "brand new factory", "first factory",
+        "brand new factory", "first factory in", "first plant in",
+        "open new factory", "open new plant", "new assembly plant",
+        "new production site", "new manufacturing hub", "new manufacturing base",
+        "new appliance plant", "new appliance factory", "new appliance manufacturing",
+        "new smartphone plant", "new smartphone factory",
+        "new phone plant", "new phone factory",
+        "new electronics plant", "new electronics factory",
+        "invest in new facility", "build new site",
+        # CN
+        "新工厂", "新建工厂", "奠基", "开工", "兴建", "建厂",
         "首个工厂", "首家工厂", "新产线", "新园区",
-        "announce factory", "announce plant", "宣布建厂",
-        "open factory", "开设工厂", "设立工厂"
+        "宣布建厂", "开设工厂", "设立工厂", "开设新厂",
+        "新制造基地", "新生产基地"
     ]
 
     # ──────────────────────────────────────────────
@@ -220,46 +251,80 @@ class TopicClassifier:
     # T4: 材料/技术白名单（必须命中才进入 Topic4）
     # ──────────────────────────────────────────────
     MATERIAL_KEYWORDS = [
-        # 显示材料/技术
-        "oled material", "oled panel", "oled stack",
+        # ── 显示技术（技术本身，非供应链价格/出货量）──────────────────────
+        "oled material", "oled panel technology", "oled stack",
         "microled", "micro-led", "micro led",
         "miniled", "mini-led", "mini led",
-        "qd-oled", "quantum dot material", "display stack", "display material",
-        "micro oled", "transparent display panel", "flexible display panel",
-        # 电池材料/技术
+        "qd-oled", "quantum dot material", "display material",
+        "micro oled", "transparent display", "flexible display",
+        "tandem oled", "blue pholed", "oled technology",
+        # 注意：display panel supply / panel shipment / panel price 属于供应链市场数据，不归T4
+
+        # ── 电池材料/技术 ────────────────────────────────────────────────
         "solid state battery", "solid-state battery", "silicon anode",
         "silicon carbon battery", "energy density breakthrough",
         "fast charging technology", "wireless charging technology",
         "battery material", "anode material", "cathode material",
-        # 新材料
+        "lithium metal battery", "sodium ion battery",
+
+        # ── 新型散热材料（手机/家电专项）───────────────────────────────────
+        "thermal interface material", "thermal management material",
+        "heat dissipation material", "thermal pad",
+        "vapor chamber", "heat pipe", "graphite sheet", "graphite film",
+        "graphene thermal", "graphene heat", "graphene film",
+        "boron nitride", "bn thermal", "hexagonal boron nitride",
+        "liquid metal cooling", "liquid metal thermal",
+        "phase change material", "pcm thermal",
+        "carbon fiber thermal", "thermal conductivity",
+        "new cooling material", "advanced thermal",
+        # 中文散热
+        "均热板", "热管", "导热材料", "散热材料", "新型散热",
+        "石墨烯散热", "氮化硼散热", "液态金属散热",
+        "相变材料", "碳纤维散热", "导热系数", "热界面材料",
+        "散热片", "导热垫", "热扩散",
+
+        # ── 复合材料（手机/家电机身/结构件）────────────────────────────────
+        "composite material", "carbon fiber composite",
+        "carbon fiber reinforced", "cfrp", "cfrtp",
+        "ceramic composite", "glass ceramic",
+        "titanium alloy", "titanium composite",
+        "magnesium alloy", "aluminum alloy composite",
+        "fiber reinforced", "polymer composite",
+        "bio-composite", "nano composite", "nanocomposite",
+        "lightweight material", "high-strength material",
+        # 中文复合材料
+        "复合材料", "碳纤维复合", "碳纤维增强", "陶瓷复合",
+        "钛合金", "镁合金", "铝合金复合", "玻璃陶瓷",
+        "轻量化材料", "高强度材料", "纳米复合", "纤维增强",
+
+        # ── 其他新材料 ────────────────────────────────────────────────────
         "graphene", "carbon nanotube", "perovskite",
         "gallium nitride material", "gan material",
         "silicon carbide material", "sic material",
-        "titanium alloy", "ceramic material",
-        # 散热/结构
-        "vapor chamber", "heat pipe", "graphite sheet",
-        "thermal interface material",
-        # 传感/摄像
+        "ceramic material",
+
+        # ── 传感/摄像 ─────────────────────────────────────────────────────
         "under-display camera", "under display fingerprint",
         "ultrasonic fingerprint sensor", "3d sensing module",
         "tof sensor", "lidar module",
-        # 中文
-        "OLED材料", "OLED面板", "MicroLED", "MiniLED",
+
+        # ── 中文通用 ──────────────────────────────────────────────────────
+        "OLED材料", "MicroLED", "MiniLED",
         "固态电池", "硅负极", "硅碳电池", "量子点材料",
         "显示材料", "石墨烯", "碳纳米管", "钙钛矿",
-        "氮化镓材料", "碳化硅材料", "钛合金",
-        "均热板", "热管", "导热材料", "散热材料",
+        "氮化镓材料", "碳化硅材料",
         "屏下摄像头", "屏下指纹", "超声波指纹传感器"
     ]
 
     # T4 High: 明确指出被 OEM 采用（adoption signal）
     ADOPTION_SIGNAL_KEYWORDS = [
-        "used in", "adopted by", "will be used in", "designed for",
+        "used in", "adopted by", "adopted in", "adopted for",
+        "will be used in", "designed for", "designed to be used",
         "integrated into", "equipped with", "built into",
-        "confirmed for", "supplied to", "selected by",
+        "confirmed for", "supplied to", "selected by", "applied to",
         "搭载", "用于", "配备", "内置", "确认采用",
         "供应给", "已应用于", "已用于", "首发于",
-        "将用于", "选定", "选用"
+        "将用于", "选定", "选用", "已搭载", "采用于"
     ]
 
     # T4 Med: 已商业化/量产（需比High更保守）
@@ -316,15 +381,44 @@ class TopicClassifier:
         "llm model", "foundation model", "large language model",
         "ai platform", "ai ecosystem", "generative ai platform",
         "ai chatbot", "ai chat app", "ai assistant app", "chatbot release",
+        "ai model has", "new ai model", "ai reasoning", "ai promises",
         "software update", "os update", "firmware update",
         "android update", "ios update", "app store news",
         "cloud computing", "saas platform",
+        "messaging app", "standalone app", "now on the app store",
+        "available on the app store", "digital id feature", "wallet app",
         "软件更新", "系统更新", "固件升级", "生态系统", "AI聊天", "AI助手应用",
+        "AI大模型", "大语言模型",
+        # 流媒体/娱乐内容（Apple TV+等）
+        "apple tv+", "streaming service", "tv show", "tv series", "tv comedy",
+        "tv drama", "streaming content", "original series", "new comedy",
+        "new series", "movie premiere", "film review",
+        "流媒体", "电视剧", "综艺", "电影首映", "剧集",
+        # 生活方式/人物专访/社论
+        "lifestyle", "人物专访", "建筑设计师", "阅读清单", "碎片时间",
+        "低头是", "抬头是", "散步", "街道上", "城市空间",
+        # 食品/餐饮/非CE内容
+        "食品安全", "餐饮", "网络餐饮", "食品案例", "鸭肉", "牛肉",
+        "幽灵外卖", "过期原料", "food safety", "restaurant review",
+        # CSR/环保/公关（无产品）
+        "coral reef", "environmental initiative", "sustainability initiative",
+        "csr initiative", "receives award", "international recognition",
+        "environmental award", "green initiative",
+        "珊瑚礁", "环保倡议", "社会责任", "获奖", "荣获",
+        # 观点/评论/社论
+        "commentary:", "opinion:", "editorial:", "column:", "analysis:",
+        "gets the worst", "is a glimpse into",
         # 论坛/会议/路演
         "webinar", "symposium", "industry forum", "investor day",
         "路演", "项目路演", "investor pitch", "startup pitch",
         "semiconductor conference", "chip conference", "semi exhibition",
         "半导体展览", "芯片展览",
+        # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
+        "panel shipment", "panel supply chain", "panel price",
+        "display panel supply", "display panel price", "display panel shipment",
+        "panel market", "oled panel price", "lcd panel price",
+        "面板出货", "面板价格", "面板供应链", "面板市场",
+        "出货量下滑", "出货量增长", "出货量数据",
         # 人员变动/协会新闻（无产品）
         "elected president", "new ceo", "appoints ceo", "board member",
         "当选主席", "当选会长",
@@ -593,12 +687,15 @@ class TopicClassifier:
         if is_product_pricing:
             return False, ""   # 价格新闻归 T3 Low，不归 T4
 
-        # Gate 3: 必须有 CE 应用链接（技术需要落地到具体产品）
-        has_ce_link = (
-            any(kw.lower() in text for kw in self.MOBILE_KEYWORDS) or
-            any(kw.lower() in text for kw in self.HOME_APPLIANCE_KEYWORDS) or
-            any(kw.lower() in text for kw in ["phone", "tv", "smartphone", "手机", "电视", "家电"])
-        )
+        # Gate 3: 必须有 CE 应用链接（技术需要落地到具体产品或消费电子领域）
+        CE_LINK_KEYWORDS = [
+            "phone", "smartphone", "mobile", "iphone", "galaxy",
+            "tv", "television", "home appliance",
+            "consumer electronics", "electronic device", "electronics",
+            "wearable", "tablet", "laptop", "earbuds",
+            "手机", "电视", "家电", "消费电子", "显示器"
+        ]
+        has_ce_link = any(kw.lower() in text for kw in CE_LINK_KEYWORDS)
         if not has_ce_link:
             return False, ""
 

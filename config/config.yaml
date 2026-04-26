@@ -47,38 +47,91 @@ sources:
         label: "T2-AI芯片-EN"
       - query: "DRAM HBM memory chip Samsung SK Hynix Micron"
         label: "T2-内存芯片-EN"
-      # T3 — Manufacturing SEA/India
-      - query: "vietnam india thailand factory electronics manufacturing investment"
-        label: "T3-SEA制造-EN"
-      - query: "apple foxconn samsung supplier vietnam india factory expand"
-        label: "T3-供应商-EN"
-      - query: "electronics manufacturing indonesia malaysia investment capacity"
-        label: "T3-东南亚-EN"
-      - query: "india electronics factory samsung apple investment 2025"
-        label: "T3-印度制造-EN"
-      - query: "supply chain electronics component shortage tariff 2025"
-        label: "T3-供应链-EN"
-      # T4 — Exhibitions (4 separate queries for broader coverage)
-      - query: "CES 2025 2026 consumer electronics show Las Vegas"
-        label: "T4-CES-EN"
-      - query: "MWC Mobile World Congress Barcelona 2025"
-        label: "T4-MWC-EN"
-      - query: "IFA Berlin AWE appliance exhibition 2025"
-        label: "T4-IFA-AWE-EN"
-      - query: "Display Week SID Computex electronics trade show 2025"
-        label: "T4-展会-EN"
-      # Market research / Japan
-      - query: "smartphone market share shipment IDC 2025 forecast"
-        label: "T1-市场份额-EN"
-      - query: "japan electronics sony panasonic sharp nikkei 2025"
-        label: "T2-日本-EN"
+      # ── T1: SEA制造扩产（11条专项查询）──────────────────────────────
+      - query: "foxconn apple samsung electronics expand capacity vietnam india 2026"
+        label: "T1-代工扩产-EN"
+      - query: "vietnam electronics factory expand scale up production smartphone appliance"
+        label: "T1-越南扩产-EN"
+      - query: "india electronics manufacturing expand increase capacity apple foxconn 2026"
+        label: "T1-印度扩产-EN"
+      - query: "thailand electronics factory smartphone home appliance expand capacity 2026"
+        label: "T1-泰国扩产-EN"
+      - query: "malaysia penang electronics manufacturing factory expand capacity smartphone 2026"
+        label: "T1-马来西亚扩产-EN"
+      - query: "indonesia electronics factory smartphone home appliance expand production 2026"
+        label: "T1-印尼扩产-EN"
+      - query: "singapore electronics manufacturing expand capacity consumer electronics 2026"
+        label: "T1-新加坡扩产-EN"
+      - query: "site:india-briefing.com electronics factory expand investment production"
+        label: "T1-IndiaBriefing扩产-EN"
+      - query: "site:vietnam-briefing.com electronics factory expand scale investment"
+        label: "T1-VietnamBriefing扩产-EN"
+      - query: "site:thailand-briefing.com electronics factory expand smartphone appliance"
+        label: "T1-ThailandBriefing扩产-EN"
+      - query: "site:reuters.com OR site:bloomberg.com southeast asia electronics factory expand 2026"
+        label: "T1-Reuters-SEA全区-EN"
+      # ── T2: SEA新建工厂（10条专项查询）──────────────────────────────
+      - query: "new electronics factory build vietnam india greenfield plant construct 2026"
+        label: "T2-新建厂-EN"
+      - query: "apple foxconn new factory india vietnam construction groundbreaking 2026"
+        label: "T2-新建厂-苹果富士康-EN"
+      - query: "samsung LG new manufacturing plant southeast asia build invest 2026"
+        label: "T2-新建厂-Samsung-LG-EN"
+      - query: "thailand new electronics factory smartphone home appliance plant build 2026"
+        label: "T2-泰国新建厂-EN"
+      - query: "malaysia new electronics factory smartphone home appliance greenfield 2026"
+        label: "T2-马来西亚新建厂-EN"
+      - query: "indonesia new electronics factory consumer electronics plant construct 2026"
+        label: "T2-印尼新建厂-EN"
+      - query: "site:india-briefing.com new factory plant build construction electronics"
+        label: "T2-IndiaBriefing新厂-EN"
+      - query: "site:vietnam-briefing.com new factory plant construction electronics"
+        label: "T2-VietnamBriefing新厂-EN"
+      - query: "site:thailand-briefing.com new factory plant construction electronics"
+        label: "T2-ThailandBriefing新厂-EN"
+      - query: "consumer electronics new plant greenfield southeast asia indonesia thailand malaysia 2026"
+        label: "T2-SEA四国新建厂-EN"
+      # ── T4: 新技术/材料（12条专项查询）────────────────────────────────
+      # 显示技术（技术本身，非供应链）
+      - query: "MicroLED MiniLED OLED display technology smartphone TV breakthrough 2026"
+        label: "T4-显示技术-EN"
+      - query: "site:oled-info.com display technology adoption smartphone 2026"
+        label: "T4-OLEDinfo-EN"
+      - query: "site:microled-info.com display technology TV smartphone 2026"
+        label: "T4-MicroLEDinfo-EN"
+      # 固态电池/新型电池
+      - query: "solid state battery silicon anode consumer electronics phone TV 2026"
+        label: "T4-固态电池-EN"
+      - query: "new battery technology smartphone home appliance energy density 2026"
+        label: "T4-电池技术-EN"
+      # 新型散热材料（手机/家电专项）
+      - query: "thermal interface material graphene vapor chamber smartphone phone cooling 2026"
+        label: "T4-散热材料手机-EN"
+      - query: "new thermal material heat dissipation home appliance phone boron nitride 2026"
+        label: "T4-散热材料家电-EN"
+      - query: "liquid metal cooling graphene thermal film consumer electronics smartphone 2026"
+        label: "T4-新型散热-EN"
+      - query: "carbon fiber thermal pad phase change material phone appliance heat management"
+        label: "T4-散热材料CE-EN"
+      # 复合材料（手机/家电机身）
+      - query: "carbon fiber composite smartphone phone chassis casing lightweight material 2026"
+        label: "T4-碳纤维手机-EN"
+      - query: "titanium alloy composite magnesium alloy phone home appliance casing 2026"
+        label: "T4-金属复合材料-EN"
+      - query: "new composite material ceramic smartphone body consumer electronics 2026"
+        label: "T4-复合材料CE-EN"
+      # Market research
+      - query: "smartphone market share shipment IDC 2026 forecast"
+        label: "T3-市场份额-EN"
+      - query: "japan electronics sony panasonic sharp nikkei 2026"
+        label: "T3-日本CE-EN"
       # Site-specific: moneydj / eastmoney / eet-china / technews (Google News proxy)
       - query: "moneydj 電子 半導體 消費電子 製造"
-        label: "T2-MoneyDJ-TW"
-      - query: "eastmoney 消费电子 半导体 手机 家电 制造"
-        label: "T1-EastMoney-CN"
-      - query: "eet-china 半导体 消费电子 元器件 制造"
-        label: "T2-EETchina-CN"
+        label: "T3-MoneyDJ-TW"
+      - query: "eastmoney 消费电子 手机 家电 制造"
+        label: "T3-EastMoney-CN"
+      - query: "eet-china 消费电子 元器件 制造"
+        label: "T4-EETchina-CN"
     zh:
       # T1 — 竞品动态
       - query: "小米华为OPPO vivo手机发布上市2025"
@@ -98,16 +151,37 @@ sources:
         label: "T2-材料-ZH"
       - query: "HBM存储芯片三星海力士美光"
         label: "T2-内存-ZH"
-      # T3 — 制造
-      - query: "越南印度工厂电子制造投资扩产"
-        label: "T3-SEA-ZH"
-      - query: "三星苹果富士康供应商越南印度建厂"
-        label: "T3-供应商-ZH"
-      - query: "印度电子制造苹果三星工厂投资2025"
-        label: "T3-印度-ZH"
-      # T4 — 展会
-      - query: "CES IFA MWC展会消费电子2025"
-        label: "T4-展会-ZH"
+      # T1 — 东南亚扩产（ZH）- 含泰国/马来西亚/印尼/新加坡
+      - query: "越南印度泰国马来西亚印尼手机家电工厂扩产产能增加2026"
+        label: "T1-东南亚四国扩产-ZH"
+      - query: "富士康苹果越南泰国马来西亚工厂扩大产能追加投资"
+        label: "T1-代工扩产-ZH"
+      - query: "泰国手机家电制造工厂扩产投资增加产能2026"
+        label: "T1-泰国扩产-ZH"
+      - query: "马来西亚槟城电子制造手机家电工厂扩产增产2026"
+        label: "T1-马来西亚扩产-ZH"
+      - query: "印度尼西亚手机家电工厂扩产产能投资增加2026"
+        label: "T1-印尼扩产-ZH"
+      # T2 — 东南亚新建工厂（ZH）- 含泰国/马来西亚/印尼/新加坡
+      - query: "泰国马来西亚印尼新建工厂消费电子手机家电建厂2026"
+        label: "T2-SEA四国新建厂-ZH"
+      - query: "越南泰国新建工厂消费电子建厂奠基开工2026"
+        label: "T2-越南泰国新建厂-ZH"
+      - query: "苹果富士康三星泰国马来西亚印尼建厂新工厂投资"
+        label: "T2-供应商四国建厂-ZH"
+      # T4 — 新技术材料（ZH）
+      - query: "MicroLED MiniLED OLED显示技术手机电视突破应用2026"
+        label: "T4-显示技术-ZH"
+      - query: "固态电池硅负极消费电子手机家电量产应用2026"
+        label: "T4-固态电池-ZH"
+      - query: "新型散热材料石墨烯均热板手机家电散热2026"
+        label: "T4-散热材料-ZH"
+      - query: "导热材料氮化硼液态金属散热手机消费电子应用2026"
+        label: "T4-导热材料-ZH"
+      - query: "碳纤维复合材料手机机身壳体轻量化消费电子2026"
+        label: "T4-碳纤维复合-ZH"
+      - query: "复合材料钛合金镁合金手机家电机身新材料2026"
+        label: "T4-金属复合材料-ZH"
 
   # ========== RSS FEEDS (Priority 1) ==========
   # Note: Only sources verified to work from GitHub Actions CI are kept.
@@ -119,6 +193,8 @@ sources:
       - "https://www.microled-info.com/rss.xml"
       - "https://www.displaydaily.com/rss"
       - "https://www.ledinside.cn/rss.xml"
+      - "https://www.ledinside.com/rss.xml"           # LedInside English — T4 display tech
+      # digitimes removed — primarily covers display panel supply chain/pricing (not T4)
       # displaysupplychain.com removed — consistently fails in CI
 
     # 半导体 / Semiconductor
@@ -162,10 +238,11 @@ sources:
       # Removed: vietnam-briefing (fails), thailand-briefing (DNS), thestar.my,
       # bangkokpost (premature end), vnexpress (fails), msia.org.my (fails)
 
-    # 印度制造 / India Manufacturing  (replaced with working feeds)
+    # 印度/SEA制造 / India & SEA Manufacturing
     india_manufacturing:
       - "https://www.moneycontrol.com/rss/economy.xml"
       - "https://economictimes.indiatimes.com/rssfeeds/1977021501.cms"
+      - "https://www.electronicsforu.com/feed"        # India electronics manufacturing news
       # Original 4 sources all fail from CI — replaced with working alternatives
 
     # 供应链 / Supply Chain
@@ -179,6 +256,8 @@ sources:
       - "https://www.electrochem.org/feed"
       - "https://www.advancedsciencenews.com/feed/"
       - "https://www.electropages.com/feed"
+      - "https://www.idtechex.com/en/rss.asp"        # IDTechEx — battery/materials/display research
+      - "https://www.sciencedaily.com/rss/matter_energy/materials_science.xml"  # ScienceDaily materials
       # materialstoday (connection refused), chemistryworld, azom, compositesworld removed
 
     # 机器人/智能家居 / Robotics & Smart Home

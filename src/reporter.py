@@ -460,7 +460,23 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
     # ALERTS
     # ------------------------------------------------------------------
 
+    # 传言词 / 定价词（ALERTS 前置排除）
+    ALERTS_EXCLUDE_RUMORS = [
+        "rumor", "rumored", "leak", "leaked", "reportedly", "sources say",
+        "allegedly", "renders", "said to", "expected to", "could launch",
+        "传言", "曝光", "爆料", "据传", "渲染图", "疑似", "泄露"
+    ]
+    ALERTS_EXCLUDE_PRICING = [
+        "price", "pricing", "discount", "deal", "off,", "% off", "starts at",
+        "available for", "备件价格", "售价", "定价", "优惠", "折扣"
+    ]
+
     def _collect_alerts(self, articles_by_topic: Dict[int, List[Dict]]) -> List[str]:
+        """
+        收集高优先级警报。
+        前置排除：传言文章 / 定价文章 / 优先级非 High 的 Topic3 文章
+        正式条件：满足 ≥2 个判断维度
+        """
         alerts = []
         seen = set()
         for tid in range(1, 5):
@@ -468,6 +484,19 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
                 title = article.get("title", "")
                 if title in seen:
                     continue
+
+                text = (title + " " + article.get("summary", "")).lower()
+
+                # 前置排除1：传言文章
+                if any(kw.lower() in text for kw in self.ALERTS_EXCLUDE_RUMORS):
+                    continue
+                # 前置排除2：定价/折扣文章
+                if any(kw.lower() in text for kw in self.ALERTS_EXCLUDE_PRICING):
+                    continue
+                # 前置排除3：Topic3 必须是 High Priority 才能进 ALERTS
+                if tid == 3 and article.get("t3_priority", "low") != "high":
+                    continue
+
                 if self._count_alert_criteria(article) >= 2:
                     seen.add(title)
                     alerts.append(f"[Topic{tid}] {title}（{article.get('source', '')}）")
