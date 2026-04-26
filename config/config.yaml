@@ -213,11 +213,11 @@ sources:
       - "https://techcrunch.com/feed/"
       - "https://www.engadget.com/rss.xml"
       - "https://www.cnet.com/rss/news/"
-      - "https://www.phonearena.com/feed"
       - "https://9to5google.com/feed/"
       - "https://9to5mac.com/feed/"
       - "https://www.androidpolice.com/feed/"
-      # gsmarena.com removed — blocked by CI IP
+      # phonearena.com removed — CI IP blocked (covered by Google News RSS)
+      # gsmarena.com removed — CI IP blocked
 
     # 中文科技媒体 / Chinese Tech Media
     chinese_tech:
@@ -226,15 +226,16 @@ sources:
       - "https://www.leiphone.com/feed"
       - "https://technews.tw/feed/"
       - "https://www.eepw.com.cn/rss"
-      - "https://www.eet-china.com/rss.xml"      # EE Times China (timeout may occur, fallback tries /feed/)
+      # eet-china.com removed — consistently times out in CI (60s wasted per run)
+      # Covered by Google News RSS queries (T4-EETchina-CN)
       # moneydj/eastmoney: no public RSS — covered via Google News RSS queries above
-      # Removed: pingwest, cnbeta (DNS fails), esmchina (timeouts)
 
     # 东南亚制造 / SEA Manufacturing
     sea_manufacturing:
       - "https://www.businesstimes.com.sg/rss.xml"
-      - "https://www.channelnewsasia.com/rss/8395858"
-      - "https://www.thelec.net/feed"
+      - "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"  # Fixed CNA URL
+      # thelec.net removed — returns empty feed in CI
+      # CNA old endpoint /rss/8395858 removed — was failing, replaced with API endpoint
       # Removed: vietnam-briefing (fails), thailand-briefing (DNS), thestar.my,
       # bangkokpost (premature end), vnexpress (fails), msia.org.my (fails)
 
@@ -248,8 +249,8 @@ sources:
     # 供应链 / Supply Chain
     supply_chain:
       - "https://www.electronicdesign.com/rss.xml"
-      - "https://supplychaindigital.com/rss.xml"
-      # supplychainbrain, scmr, ebnonline, globalsmt all fail — removed
+      - "https://www.supplychaindive.com/feeds/news/"   # Replaced supplychaindigital (fails) with working alternative
+      # supplychainbrain, scmr, ebnonline, globalsmt, supplychaindigital all fail — removed
 
     # 新材料 / Materials & Battery
     materials_battery:
@@ -286,11 +287,11 @@ sources:
       - "https://news.samsung.com/global/rss"
       - "https://developer.samsung.com/feed"
 
-    # 元器件供应商 / Component Suppliers (replaced with working feeds)
+    # 元器件供应商 / Component Suppliers
     component_suppliers:
-      - "https://www.electronicproducts.com/rss.xml"
       - "https://www.electronicdesign.com/rss.xml"
-      # murata, tdk, kyocera (DNS), rohm all fail from CI — replaced
+      # electronicproducts.com removed — redirects to edn.com which DNS-fails in CI
+      # murata, tdk, kyocera (DNS), rohm all fail from CI — removed
 
     # 日本产业新闻 / Japan Industry
     japan_industry:
