@@ -59,31 +59,47 @@ class TopicClassifier:
         "laptop", "notebook", "笔记本",
         "tablet", "平板",
         "wearable", "smartwatch", "可穿戴", "智能手表",
-        "earphone", "earbuds", "headphone", "耳机",
+        "earphone", "earbuds", "headphone", "airpods", "耳机",
         "speaker", "soundbar", "音箱",
         "digital device", "数码产品",
         "phone assembly", "手机组装",
         "appliance manufacturing", "家电制造",
         "electronics assembly", "电子组装",
         "electronics manufacturing", "电子制造",
-        "foxconn", "富士康", "pegatron", "wistron", "compal",  # 已知CE代工厂
-        "boe", "lg display", "samsung display",  # 显示厂（CE关联）
-        "iphone", "galaxy", "xiaomi", "huawei", "oppo", "vivo"
+        # 已知CE代工厂 / OEM品牌（品牌名本身即代表CE相关）
+        "foxconn", "富士康", "pegatron", "wistron", "compal", "luxshare",
+        "boe", "lg display", "samsung display", "csot", "tianma",
+        "apple", "google", "microsoft",   # 主要CE OEM
+        "iphone", "galaxy", "pixel", "surface",
+        "xiaomi", "huawei", "oppo", "vivo", "honor",
+        # 组件/供应链（CE专属）
+        "display panel", "面板", "oled panel", "touch panel",
+        "camera module", "battery pack", "phone battery"
     ]
 
     # ──────────────────────────────────────────────
     # T1: 现有工厂扩产关键词（不包含新建）
     # ──────────────────────────────────────────────
     EXPANSION_KEYWORDS = [
-        "expand", "expansion", "expanding", "扩产", "扩建", "扩大",
-        "increase capacity", "additional capacity", "产能扩大", "产能增加",
-        "boost production", "ramp up", "scale up", "产能提升",
-        "invest in existing", "upgrade facility", "升级产线",
-        "additional investment", "追加投资", "增资",
-        "production ramp", "产能爬坡",
-        "capacity increase", "capacity expansion",
-        "add production line", "新增产线",
-        "double capacity", "triple capacity", "产能翻倍"
+        # EN — explicit expansion
+        "expand", "expansion", "expanding", "expanded",
+        "increase capacity", "additional capacity", "capacity increase", "capacity expansion",
+        "boost production", "boost capacity",
+        "ramp up", "ramp up production", "ramps up", "ramping up",
+        "scale up", "scale up production", "scale production",
+        "scales up", "scaling up", "stepped up", "step up production",
+        "accelerates investment", "accelerate production", "accelerating investment",
+        "invest in existing", "additional investment", "increasing investment",
+        "upgrade facility", "upgrade production",
+        "add production line", "add assembly line",
+        "double capacity", "triple capacity", "lift production",
+        "increase output", "higher output", "increase allocation",
+        "strengthens presence", "deepens investment",
+        # CN
+        "扩产", "扩建", "扩大", "产能扩大", "产能增加", "产能提升",
+        "追加投资", "增资", "扩大投资", "加大投资",
+        "产能爬坡", "新增产线", "产能翻倍", "增加产线",
+        "提升产能", "加速投资", "深化投资"
     ]
 
     # T1 中需排除的"新建"特征词（有这些 → 应去 T2 而非 T1）
@@ -91,21 +107,28 @@ class TopicClassifier:
         "new factory", "new plant", "new facility", "new manufacturing",
         "groundbreaking", "break ground", "奠基", "开工", "新建", "新工厂",
         "construction of", "build a factory", "set up factory",
-        "establish factory", "首个工厂", "新厂"
+        "establish factory", "首个工厂", "新厂", "first factory in",
+        "brand new plant", "greenfield"
     ]
 
     # ──────────────────────────────────────────────
     # T2: 新建工厂关键词
     # ──────────────────────────────────────────────
     NEW_FACTORY_KEYWORDS = [
-        "new factory", "new plant", "new facility", "新工厂", "新建工厂",
-        "groundbreaking", "break ground", "奠基", "开工", "兴建",
-        "construction of factory", "build factory", "建厂",
+        # EN
+        "new factory", "new plant", "new facility", "new manufacturing facility",
+        "groundbreaking", "break ground", "greenfield",
+        "construction of factory", "build factory", "building factory",
         "set up manufacturing", "establish manufacturing",
-        "greenfield", "brand new factory", "first factory",
+        "brand new factory", "first factory in", "first plant in",
+        "open new factory", "open new plant", "new assembly plant",
+        "new production site", "new manufacturing hub", "new manufacturing base",
+        "invest in new facility", "build new site",
+        # CN
+        "新工厂", "新建工厂", "奠基", "开工", "兴建", "建厂",
         "首个工厂", "首家工厂", "新产线", "新园区",
-        "announce factory", "announce plant", "宣布建厂",
-        "open factory", "开设工厂", "设立工厂"
+        "宣布建厂", "开设工厂", "设立工厂", "开设新厂",
+        "新制造基地", "新生产基地"
     ]
 
     # ──────────────────────────────────────────────
@@ -222,12 +245,16 @@ class TopicClassifier:
     MATERIAL_KEYWORDS = [
         # 显示材料/面板技术（扩大覆盖）
         "oled material", "oled panel", "oled stack", "oled display panel",
-        "amoled", "ltps panel", "ltpo panel", "display panel technology",
+        "amoled", "amoled display", "amoled panel",
+        "ltps panel", "ltpo panel", "ltps amoled",
+        "display panel technology", "display panel supply", "panel shipment",
+        "display panel price", "panel price",
         "microled", "micro-led", "micro led",
         "miniled", "mini-led", "mini led",
         "qd-oled", "quantum dot material", "display stack", "display material",
         "micro oled", "transparent display panel", "flexible display panel",
         "display supply", "panel supply", "screen technology", "display technology",
+        "tandem oled", "blue pholed", "oled technology",
         # 电池材料/技术
         "solid state battery", "solid-state battery", "silicon anode",
         "silicon carbon battery", "energy density breakthrough",
@@ -618,12 +645,15 @@ class TopicClassifier:
         if is_product_pricing:
             return False, ""   # 价格新闻归 T3 Low，不归 T4
 
-        # Gate 3: 必须有 CE 应用链接（技术需要落地到具体产品）
-        has_ce_link = (
-            any(kw.lower() in text for kw in self.MOBILE_KEYWORDS) or
-            any(kw.lower() in text for kw in self.HOME_APPLIANCE_KEYWORDS) or
-            any(kw.lower() in text for kw in ["phone", "tv", "smartphone", "手机", "电视", "家电"])
-        )
+        # Gate 3: 必须有 CE 应用链接（技术需要落地到具体产品或消费电子领域）
+        CE_LINK_KEYWORDS = [
+            "phone", "smartphone", "mobile", "iphone", "galaxy",
+            "tv", "television", "home appliance",
+            "consumer electronics", "electronic device", "electronics",
+            "wearable", "tablet", "laptop", "earbuds",
+            "手机", "电视", "家电", "消费电子", "显示器"
+        ]
+        has_ce_link = any(kw.lower() in text for kw in CE_LINK_KEYWORDS)
         if not has_ce_link:
             return False, ""
 
