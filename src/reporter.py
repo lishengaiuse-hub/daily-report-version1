@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Report Generator for Samsung CE Intelligence
+Report Generator for CE Intelligence
 Version: 6.0 - 严格QA + 单一归属 + ALERTS双条件 + 新输出格式
 """
 
@@ -30,6 +30,70 @@ class ReportGenerator:
         4: "🟨"
     }
 
+    # 报告输出章节顺序（按用户要求）
+    # 每个 section 对应 source_topic（来自哪个T分类）
+    # T3 拆分为两个子章节：CE制造 vs 新建厂/经济
+    SECTIONS = [
+        {
+            "key":          "t3_ce",
+            "emoji":        "🟩",
+            "title_en":     "Consumer Electronics Manufacturing in Southeast Asia",
+            "title_zh":     "东南亚消费电子制造动态",
+            "source_topic": 3,
+            "sub":          "ce"      # T3 CE子集
+        },
+        {
+            "key":          "t1",
+            "emoji":        "🟥",
+            "title_en":     "Major Product Announcements",
+            "title_zh":     "重大产品发布",
+            "source_topic": 1,
+            "sub":          None
+        },
+        {
+            "key":          "t3_plant",
+            "emoji":        "🟦",
+            "title_en":     "New Manufacturing Plants & Southeast Asia Economy Updates",
+            "title_zh":     "新建厂 / 东南亚经济动态",
+            "source_topic": 3,
+            "sub":          "plant"   # T3 工厂/经济子集
+        },
+        {
+            "key":          "t2",
+            "emoji":        "🟨",
+            "title_en":     "New Technology / Materials",
+            "title_zh":     "新技术 / 新材料",
+            "source_topic": 2,
+            "sub":          None
+        },
+        {
+            "key":          "t4",
+            "emoji":        "⬜",
+            "title_en":     "Industry Exhibitions",
+            "title_zh":     "行业展会",
+            "source_topic": 4,
+            "sub":          None
+        },
+    ]
+
+    # T3 拆分关键词
+    CE_MANUFACTURING_KEYWORDS = [
+        "phone", "smartphone", "mobile", "handset", "iphone",
+        "tv", "television", "oled tv", "qled", "home appliance",
+        "vacuum", "washer", "refrigerator", "fridge", "air conditioner",
+        "consumer electronics", "foldable", "tablet", "laptop", "wearable",
+        "手机", "智能手机", "电视", "家电", "冰箱", "洗衣机", "空调",
+        "折叠屏", "消费电子", "平板", "笔记本", "可穿戴", "扫地机"
+    ]
+
+    PLANT_ECONOMY_KEYWORDS = [
+        "factory", "plant", "facility", "manufacturing plant", "assembly line",
+        "investment", "billion", "million dollar", "gdp", "economy", "economic",
+        "capacity", "expansion", "new facility", "greenfield", "construction",
+        "工厂", "产线", "新建", "投资", "亿", "经济", "产能", "扩产",
+        "建厂", "园区", "开工", "落地", "奠基", "试运行"
+    ]
+
     IMPACT_LABELS = {
         "high": "🔴 HIGH",
         "medium": "🟡 MED",
@@ -51,9 +115,9 @@ class ReportGenerator:
 
     # ALERTS 四大判断维度（必须满足 ≥2 个）
     ALERT_CRITERIA = {
-        "impacts_samsung": [
-            "samsung", "三星", "market share", "市场份额", "competitor", "竞争",
-            "rival", "beats samsung", "overtake", "超越三星"
+        "impacts_industry": [
+            "market share", "市场份额", "competitor", "竞争", "rival",
+            "overtake", "disruption", "breakthrough", "突破", "颠覆", "超越"
         ],
         "core_tech": [
             "ai", "chip", "芯片", "oled", "microled", "semiconductor", "半导体",
@@ -130,6 +194,29 @@ class ReportGenerator:
         print(f"   🔍 Final QA gate: removed {removed} articles")
         return result
 
+    def _split_t3(self, t3_articles: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        将 T3 文章拆分为两个子章节：
+        - "ce"   : Consumer electronics manufacturing (含CE产品关键词)
+        - "plant": New factories / SEA economy (工厂投资/经济动态)
+        一篇文章只归入一个子章节（CE优先）。
+        """
+        ce_articles: List[Dict] = []
+        plant_articles: List[Dict] = []
+
+        for article in t3_articles:
+            text = (article.get("title", "") + " " + article.get("summary", "")).lower()
+            if any(kw.lower() in text for kw in self.CE_MANUFACTURING_KEYWORDS):
+                ce_articles.append(article)
+            else:
+                plant_articles.append(article)
+
+        # 若 CE 组为空则全部放入 plant 组（避免空章节）
+        if not ce_articles:
+            plant_articles = t3_articles
+
+        return {"ce": ce_articles, "plant": plant_articles}
+
     def _t4_has_structure(self, article: Dict) -> bool:
         """T4 必须有时间和地点信息"""
         has_date = bool(
@@ -164,12 +251,12 @@ class ReportGenerator:
         articles_by_topic = self._group_by_topic(articles)
 
         lines = []
-        lines.append(f"# 📰 三星产业情报日报（{date_str}）")
+        lines.append(f"# 📰 消费电子产业情报日报（{date_str}）")
         lines.append("")
 
         # ── ALERTS ──────────────────────────────────────────────────────
         lines.append("## 🚨 ALERTS（高优先级）")
-        lines.append("> 入选条件：必须满足以下 ≥2 项：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产")
+        lines.append("> 入选条件：必须满足以下 ≥2 项：影响行业格局 / 核心技术 / 供应链风险 / 重大投资扩产")
         lines.append("")
         alerts = self._collect_alerts(articles_by_topic)
         if alerts:
@@ -181,24 +268,34 @@ class ReportGenerator:
         lines.append("---")
         lines.append("")
 
-        # ── T1-T4 Sections ──────────────────────────────────────────────
-        for tid in range(1, 5):
-            emoji = self.TOPIC_EMOJIS[tid]
-            name  = self.TOPIC_NAMES[tid]
-            topic_articles = articles_by_topic.get(tid, [])
+        # ── 报告章节（按用户指定顺序）────────────────────────────────────
+        t3_split = self._split_t3(articles_by_topic.get(3, []))
 
-            lines.append(f"## {emoji} T{tid} — {name}")
+        for sec_idx, section in enumerate(self.SECTIONS, start=1):
+            emoji     = section["emoji"]
+            title_en  = section["title_en"]
+            title_zh  = section["title_zh"]
+            src_topic = section["source_topic"]
+            sub       = section["sub"]
+
+            if sub:
+                sec_articles = t3_split.get(sub, [])
+            else:
+                sec_articles = articles_by_topic.get(src_topic, [])
+
+            lines.append(f"## {emoji} Section {sec_idx} — {title_en}")
+            lines.append(f"> {title_zh}")
             lines.append("")
 
-            if not topic_articles:
+            if not sec_articles:
                 lines.append("_今日无相关新闻_")
                 lines.append("")
                 lines.append("---")
                 lines.append("")
                 continue
 
-            for article in topic_articles:
-                lines.extend(self._format_article_md(article, tid))
+            for article in sec_articles:
+                lines.extend(self._format_article_md(article, src_topic))
 
             lines.append("---")
             lines.append("")
@@ -265,17 +362,25 @@ class ReportGenerator:
             for a in alerts[:8]
         ) or '<div class="alert-item">今日无符合双条件的高优先级警报</div>'
 
+        t3_split = self._split_t3(articles_by_topic.get(3, []))
         topic_html_parts = []
-        for tid in range(1, 5):
-            topic_articles = articles_by_topic.get(tid, [])
-            if not topic_articles:
+        for sec_idx, section in enumerate(self.SECTIONS, start=1):
+            emoji     = section["emoji"]
+            title_en  = section["title_en"]
+            src_topic = section["source_topic"]
+            sub       = section["sub"]
+
+            if sub:
+                sec_articles = t3_split.get(sub, [])
+            else:
+                sec_articles = articles_by_topic.get(src_topic, [])
+
+            if not sec_articles:
                 continue
-            cards = "".join(self._format_article_card(a, tid) for a in topic_articles[:20])
-            emoji = self.TOPIC_EMOJIS[tid]
-            name  = self.TOPIC_NAMES[tid]
+            cards = "".join(self._format_article_card(a, src_topic) for a in sec_articles[:20])
             topic_html_parts.append(f"""
             <div class="topic-section">
-                <h2 class="topic-title">{emoji} T{tid} — {name}</h2>
+                <h2 class="topic-title">{emoji} {sec_idx}. {title_en}</h2>
                 <div class="articles-grid">{cards}</div>
             </div>""")
 
@@ -287,7 +392,7 @@ class ReportGenerator:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Samsung CE Intelligence - {date_str}</title>
+<title>CE Intelligence Daily Report - {date_str}</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f0f2f5;padding:20px;color:#1a1a2e}}
@@ -322,8 +427,8 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
 <body>
 <div class="container">
   <div class="header">
-    <h1>📰 三星产业情报日报</h1>
-    <div class="date">{date_display} · 严格分类 T1-T4 · 单一归属 · 三层去重</div>
+    <h1>📰 消费电子产业情报日报</h1>
+    <div class="date">{date_display} · 严格分类 · 单一归属 · 三层去重</div>
   </div>
   <div class="stats-bar">
     <div class="stat-item"><div class="stat-number">{total}</div><div class="stat-label">今日新闻</div></div>
@@ -331,12 +436,12 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
     <div class="stat-item"><div class="stat-number">T1–T4</div><div class="stat-label">四大栏目</div></div>
   </div>
   <div class="alerts-section">
-    <div class="alerts-title">🚨 ALERTS — 今日高优先级情报（≥2条判断维度）</div>
+    <div class="alerts-title">🚨 ALERTS — 今日高优先级情报（满足 ≥2 个判断维度）</div>
     {alerts_html}
   </div>
   {''.join(topic_html_parts)}
   <div class="footer">
-    🤖 Samsung CE Intelligence System v6.0 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    🤖 CE Intelligence System v6.0 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
   </div>
 </div>
 </body>
@@ -357,7 +462,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
     def _collect_alerts(self, articles_by_topic: Dict[int, List[Dict]]) -> List[str]:
         """
         收集高优先级警报。
-        必须满足 ≥2 个维度：影响三星业务 / 核心技术 / 供应链风险 / 重大投资扩产
+        必须满足 ≥2 个维度：影响行业格局 / 核心技术 / 供应链风险 / 重大投资扩产
         """
         alerts = []
         seen = set()
@@ -463,14 +568,14 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
             return summary[:150] + ("..." if len(summary) > 150 else "")
         try:
             emphasis = {
-                "high": "重点突出对三星的紧迫影响和行动建议。",
-                "medium": "客观总结事件内容，说明对三星的潜在影响。",
+                "high": "重点突出对行业的紧迫影响和关键行动建议。",
+                "medium": "客观总结事件内容，说明对行业的潜在影响。",
                 "low": "简要记录该动态。"
             }.get(impact, "客观总结主要内容。")
             resp = openai.ChatCompletion.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": f"你是三星电子消费电子情报分析师。请用简洁专业的中文生成1-2句总结（不超过80字）。{emphasis}直接陈述，不使用开头语。"},
+                    {"role": "system", "content": f"你是消费电子行业资深情报分析师。请用简洁专业的中文生成1-2句总结（不超过80字）。{emphasis}直接陈述，不使用开头语。"},
                     {"role": "user", "content": f"标题：{article.get('title', '')}\n内容：{summary[:1200]}"}
                 ],
                 temperature=0.3, max_tokens=120

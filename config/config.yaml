@@ -72,6 +72,13 @@ sources:
         label: "T1-市场份额-EN"
       - query: "japan electronics sony panasonic sharp nikkei 2025"
         label: "T2-日本-EN"
+      # Site-specific: moneydj / eastmoney / eet-china / technews (Google News proxy)
+      - query: "moneydj 電子 半導體 消費電子 製造"
+        label: "T2-MoneyDJ-TW"
+      - query: "eastmoney 消费电子 半导体 手机 家电 制造"
+        label: "T1-EastMoney-CN"
+      - query: "eet-china 半导体 消费电子 元器件 制造"
+        label: "T2-EETchina-CN"
     zh:
       # T1 — 竞品动态
       - query: "小米华为OPPO vivo手机发布上市2025"
@@ -143,7 +150,9 @@ sources:
       - "https://www.leiphone.com/feed"
       - "https://technews.tw/feed/"
       - "https://www.eepw.com.cn/rss"
-      # Removed: pingwest, cnbeta (DNS fails), eechina, eet-china, esmchina (timeouts)
+      - "https://www.eet-china.com/rss.xml"      # EE Times China (timeout may occur, fallback tries /feed/)
+      # moneydj/eastmoney: no public RSS — covered via Google News RSS queries above
+      # Removed: pingwest, cnbeta (DNS fails), esmchina (timeouts)
 
     # 东南亚制造 / SEA Manufacturing
     sea_manufacturing:
