@@ -179,7 +179,10 @@ class TopicClassifier:
         "render", "renders", "concept", "expected to", "may feature",
         "could launch", "might launch",
         "传言", "传闻", "曝光", "爆料", "疑似", "据传", "据报道", "消息称",
-        "渲染图", "渲染", "泄露", "疑曝", "可能搭载", "预计发布"
+        "渲染图", "渲染", "泄露", "疑曝", "可能搭载", "预计发布",
+        "曝 ", "曝三", "曝苹", "曝小", "曝华",  # 中文"曝"作为首词
+        "有望", "有望亮相", "有望发布", "有望上市",  # 期待/预测用语
+        "据悉", "内部消息", "消息人士", "知情人士", "博主透露", "博主爆料"
     ]
 
     # T3 产品白名单（必须命中才允许进入 Topic3）
@@ -309,7 +312,9 @@ class TopicClassifier:
         "tof sensor", "lidar module",
 
         # ── 中文通用 ──────────────────────────────────────────────────────
-        "OLED材料", "MicroLED", "MiniLED",
+        "OLED材料", "OLED面板", "MicroLED", "MiniLED",
+        "LTPS面板", "LTPO面板", "AMOLED面板", "柔性面板",
+        "EL材料", "C10 EL", "发光材料",   # 面板EL/有机发光材料
         "固态电池", "硅负极", "硅碳电池", "量子点材料",
         "显示材料", "石墨烯", "碳纳米管", "钙钛矿",
         "氮化镓材料", "碳化硅材料",
@@ -323,7 +328,8 @@ class TopicClassifier:
         "integrated into", "equipped with", "built into",
         "confirmed for", "supplied to", "selected by", "applied to",
         "搭载", "用于", "配备", "内置", "确认采用",
-        "供应给", "已应用于", "已用于", "首发于",
+        "供应给", "供应", "供屏", "供货",
+        "已应用于", "已用于", "首发于",
         "将用于", "选定", "选用", "已搭载", "采用于"
     ]
 
@@ -413,6 +419,19 @@ class TopicClassifier:
         "路演", "项目路演", "investor pitch", "startup pitch",
         "semiconductor conference", "chip conference", "semi exhibition",
         "半导体展览", "芯片展览",
+        # 犯罪/诈骗/安全事件新闻（与CE产品无关）
+        "警方破获", "诈骗案", "诈骗手法", "犯罪嫌疑人", "网络诈骗",
+        "伪基站", "fake base station", "fraud arrest", "police arrest",
+        # 汽车展览会/B2B汽车科技（非CE消费者产品）
+        "国际汽车展览会", "auto show", "beijing auto", "北京车展",
+        "aptiv", "安波福", "automotive show", "车展发布",
+        # 流媒体内容/应用服务
+        "directv", "streaming app on", "live tv app", "vr streaming",
+        "quest streaming", "meta quest app",
+        # iOS/Android系统安全更新（非硬件产品）
+        "security feature", "automatically enables", "ios security",
+        "android security patch", "security update",
+        "enables this iphone", "iphone security feature",
         # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
         "panel shipment", "panel supply chain", "panel price",
         "display panel supply", "display panel price", "display panel shipment",
@@ -623,18 +642,31 @@ class TopicClassifier:
             return False
         return any(kw.lower() in text for kw in self.NEW_FACTORY_KEYWORDS)
 
+    # 供应商主导文章识别（这类文章主体是供应商供货，应归T4，不归T3）
+    SUPPLIER_LED_PATTERNS = [
+        "供屏", "供应屏幕", "供应面板", "供应显示", "供货",
+        "supplies display", "supplies panel", "supplies screen",
+        "to supply oled", "to supply panel",
+    ]
+
     def _check_t3(self, title: str, text: str) -> Tuple[bool, str]:
         """
         T3: 手机/家电产品发布。
         返回 (是否匹配, 优先级 high/med/low)
 
         Hard gates (in order):
+        0. 供应商主导文章（TCL华星供屏类）→ T4 territory
         1. Must contain a product from VALID_PRODUCTS whitelist
         2. Must have launch/review/pricing signal
         3. High = real launch + product model (no rumors)
            Med  = product review
            Low  = pricing news OR launch without model OR launch with rumor
         """
+        # Gate 0: 若文章主体是供应商供货（非品牌发布），归T4
+        title_lower = title.lower()
+        if any(kw.lower() in title_lower for kw in self.SUPPLIER_LED_PATTERNS):
+            return False, ""   # T4会处理这类技术供应新闻
+
         # Gate 1: 必须命中产品白名单
         if not any(kw.lower() in text for kw in self.VALID_PRODUCTS):
             return False, ""
@@ -687,15 +719,18 @@ class TopicClassifier:
         if is_product_pricing:
             return False, ""   # 价格新闻归 T3 Low，不归 T4
 
-        # Gate 3: 必须有 CE 应用链接（技术需要落地到具体产品或消费电子领域）
+        # Gate 3: 必须有 CE 应用链接（技术落地到CE产品或CE品牌上）
         CE_LINK_KEYWORDS = [
-            "phone", "smartphone", "mobile", "iphone", "galaxy",
+            "phone", "smartphone", "mobile", "iphone", "galaxy", "pixel",
             "tv", "television", "home appliance",
             "consumer electronics", "electronic device", "electronics",
             "wearable", "tablet", "laptop", "earbuds",
             "手机", "电视", "家电", "消费电子", "显示器"
         ]
-        has_ce_link = any(kw.lower() in text for kw in CE_LINK_KEYWORDS)
+        has_ce_link = (
+            any(kw.lower() in text for kw in CE_LINK_KEYWORDS) or
+            any(kw.lower() in text for kw in self.CE_INDUSTRY_KEYWORDS)  # 包含品牌名
+        )
         if not has_ce_link:
             return False, ""
 

@@ -317,7 +317,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
   </div>
   {''.join(topic_html_parts)}
   <div class="footer">
-    🤖 CE Intelligence System v7.0 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    🤖 CE Intelligence System v7.1 · 单一归属 · 强QA · 低幻觉 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
   </div>
 </div>
 </body>

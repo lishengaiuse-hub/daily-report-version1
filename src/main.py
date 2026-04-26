@@ -29,7 +29,7 @@ from google_news_fetcher import GoogleNewsFetcher, TOPIC_SEARCH_KEYWORDS
 
 
 class SamsungIntelligenceSystem:
-    """主调度类 - 执行完整的情报处理流水线 v6.0"""
+    """主调度类 - 执行完整的情报处理流水线 v7.1"""
 
     TOPIC_NAMES = {
         1: "T1 东南亚消费电子制造扩产",
@@ -84,7 +84,7 @@ class SamsungIntelligenceSystem:
 
     def run(self, dry_run: bool = False) -> Dict:
         print("=" * 70)
-        print("🔵 Samsung CE Intelligence System v6.0")
+        print("🔵 Samsung CE Intelligence System v7.1")
         print(f"📅 Run time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
 
@@ -343,7 +343,7 @@ class SamsungIntelligenceSystem:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v6.0")
+    parser = argparse.ArgumentParser(description="Samsung CE Intelligence System v7.1")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
     parser.add_argument("--test-email", action="store_true", help="Test email configuration")
     parser.add_argument("--config", default="config/config.yaml", help="Config file path")
