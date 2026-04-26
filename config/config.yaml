@@ -75,23 +75,35 @@ sources:
         label: "T2-VietnamBriefing新厂-EN"
       - query: "consumer electronics new plant investment southeast asia greenfield 2026"
         label: "T2-SEA绿地投资-EN"
-      # ── T4: 新技术/材料（8条专项查询）─────────────────────────────────
-      - query: "OLED panel display supply smartphone TV technology 2026"
-        label: "T4-OLED面板供应-EN"
-      - query: "MicroLED MiniLED display technology smartphone TV breakthrough adoption 2026"
-        label: "T4-MicroLED技术-EN"
-      - query: "solid state battery silicon anode consumer electronics phone 2026"
-        label: "T4-固态电池CE-EN"
-      - query: "site:digitimes.com display panel OLED MicroLED smartphone TV 2026"
-        label: "T4-Digitimes面板-EN"
-      - query: "site:oled-info.com display panel technology adoption 2026"
+      # ── T4: 新技术/材料（12条专项查询）────────────────────────────────
+      # 显示技术（技术本身，非供应链）
+      - query: "MicroLED MiniLED OLED display technology smartphone TV breakthrough 2026"
+        label: "T4-显示技术-EN"
+      - query: "site:oled-info.com display technology adoption smartphone 2026"
         label: "T4-OLEDinfo-EN"
-      - query: "site:microled-info.com display smartphone TV 2026"
+      - query: "site:microled-info.com display technology TV smartphone 2026"
         label: "T4-MicroLEDinfo-EN"
-      - query: "display panel technology new material graphene battery consumer electronics"
-        label: "T4-材料CE-EN"
-      - query: "AMOLED LTPS panel supply smartphone shipment price 2026"
-        label: "T4-面板供应链-EN"
+      # 固态电池/新型电池
+      - query: "solid state battery silicon anode consumer electronics phone TV 2026"
+        label: "T4-固态电池-EN"
+      - query: "new battery technology smartphone home appliance energy density 2026"
+        label: "T4-电池技术-EN"
+      # 新型散热材料（手机/家电专项）
+      - query: "thermal interface material graphene vapor chamber smartphone phone cooling 2026"
+        label: "T4-散热材料手机-EN"
+      - query: "new thermal material heat dissipation home appliance phone boron nitride 2026"
+        label: "T4-散热材料家电-EN"
+      - query: "liquid metal cooling graphene thermal film consumer electronics smartphone 2026"
+        label: "T4-新型散热-EN"
+      - query: "carbon fiber thermal pad phase change material phone appliance heat management"
+        label: "T4-散热材料CE-EN"
+      # 复合材料（手机/家电机身）
+      - query: "carbon fiber composite smartphone phone chassis casing lightweight material 2026"
+        label: "T4-碳纤维手机-EN"
+      - query: "titanium alloy composite magnesium alloy phone home appliance casing 2026"
+        label: "T4-金属复合材料-EN"
+      - query: "new composite material ceramic smartphone body consumer electronics 2026"
+        label: "T4-复合材料CE-EN"
       # Market research
       - query: "smartphone market share shipment IDC 2026 forecast"
         label: "T3-市场份额-EN"
@@ -136,12 +148,18 @@ sources:
       - query: "苹果富士康供应商越南印度建厂投资新工厂"
         label: "T2-供应商建厂-ZH"
       # T4 — 新技术材料（ZH）
-      - query: "OLED面板技术手机电视显示供应量产2026"
-        label: "T4-面板技术-ZH"
-      - query: "固态电池硅负极消费电子手机电视量产2026"
+      - query: "MicroLED MiniLED OLED显示技术手机电视突破应用2026"
+        label: "T4-显示技术-ZH"
+      - query: "固态电池硅负极消费电子手机家电量产应用2026"
         label: "T4-固态电池-ZH"
-      - query: "MicroLED MiniLED显示技术手机电视应用2026"
-        label: "T4-MicroLED-ZH"
+      - query: "新型散热材料石墨烯均热板手机家电散热2026"
+        label: "T4-散热材料-ZH"
+      - query: "导热材料氮化硼液态金属散热手机消费电子应用2026"
+        label: "T4-导热材料-ZH"
+      - query: "碳纤维复合材料手机机身壳体轻量化消费电子2026"
+        label: "T4-碳纤维复合-ZH"
+      - query: "复合材料钛合金镁合金手机家电机身新材料2026"
+        label: "T4-金属复合材料-ZH"
 
   # ========== RSS FEEDS (Priority 1) ==========
   # Note: Only sources verified to work from GitHub Actions CI are kept.
@@ -154,7 +172,7 @@ sources:
       - "https://www.displaydaily.com/rss"
       - "https://www.ledinside.cn/rss.xml"
       - "https://www.ledinside.com/rss.xml"           # LedInside English — T4 display tech
-      - "https://www.digitimes.com/rss/daily.xml"    # Digitimes — Asia display/tech supply chain
+      # digitimes removed — primarily covers display panel supply chain/pricing (not T4)
       # displaysupplychain.com removed — consistently fails in CI
 
     # 半导体 / Semiconductor

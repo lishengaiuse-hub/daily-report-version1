@@ -243,52 +243,80 @@ class TopicClassifier:
     # T4: 材料/技术白名单（必须命中才进入 Topic4）
     # ──────────────────────────────────────────────
     MATERIAL_KEYWORDS = [
-        # 显示材料/面板技术（扩大覆盖）
-        "oled material", "oled panel", "oled stack", "oled display panel",
-        "amoled", "amoled display", "amoled panel",
-        "ltps panel", "ltpo panel", "ltps amoled",
-        "display panel technology", "display panel supply", "panel shipment",
-        "display panel price", "panel price",
+        # ── 显示技术（技术本身，非供应链价格/出货量）──────────────────────
+        "oled material", "oled panel technology", "oled stack",
         "microled", "micro-led", "micro led",
         "miniled", "mini-led", "mini led",
-        "qd-oled", "quantum dot material", "display stack", "display material",
-        "micro oled", "transparent display panel", "flexible display panel",
-        "display supply", "panel supply", "screen technology", "display technology",
+        "qd-oled", "quantum dot material", "display material",
+        "micro oled", "transparent display", "flexible display",
         "tandem oled", "blue pholed", "oled technology",
-        # 电池材料/技术
+        # 注意：display panel supply / panel shipment / panel price 属于供应链市场数据，不归T4
+
+        # ── 电池材料/技术 ────────────────────────────────────────────────
         "solid state battery", "solid-state battery", "silicon anode",
         "silicon carbon battery", "energy density breakthrough",
         "fast charging technology", "wireless charging technology",
         "battery material", "anode material", "cathode material",
-        # 新材料
+        "lithium metal battery", "sodium ion battery",
+
+        # ── 新型散热材料（手机/家电专项）───────────────────────────────────
+        "thermal interface material", "thermal management material",
+        "heat dissipation material", "thermal pad",
+        "vapor chamber", "heat pipe", "graphite sheet", "graphite film",
+        "graphene thermal", "graphene heat", "graphene film",
+        "boron nitride", "bn thermal", "hexagonal boron nitride",
+        "liquid metal cooling", "liquid metal thermal",
+        "phase change material", "pcm thermal",
+        "carbon fiber thermal", "thermal conductivity",
+        "new cooling material", "advanced thermal",
+        # 中文散热
+        "均热板", "热管", "导热材料", "散热材料", "新型散热",
+        "石墨烯散热", "氮化硼散热", "液态金属散热",
+        "相变材料", "碳纤维散热", "导热系数", "热界面材料",
+        "散热片", "导热垫", "热扩散",
+
+        # ── 复合材料（手机/家电机身/结构件）────────────────────────────────
+        "composite material", "carbon fiber composite",
+        "carbon fiber reinforced", "cfrp", "cfrtp",
+        "ceramic composite", "glass ceramic",
+        "titanium alloy", "titanium composite",
+        "magnesium alloy", "aluminum alloy composite",
+        "fiber reinforced", "polymer composite",
+        "bio-composite", "nano composite", "nanocomposite",
+        "lightweight material", "high-strength material",
+        # 中文复合材料
+        "复合材料", "碳纤维复合", "碳纤维增强", "陶瓷复合",
+        "钛合金", "镁合金", "铝合金复合", "玻璃陶瓷",
+        "轻量化材料", "高强度材料", "纳米复合", "纤维增强",
+
+        # ── 其他新材料 ────────────────────────────────────────────────────
         "graphene", "carbon nanotube", "perovskite",
         "gallium nitride material", "gan material",
         "silicon carbide material", "sic material",
-        "titanium alloy", "ceramic material",
-        # 散热/结构
-        "vapor chamber", "heat pipe", "graphite sheet",
-        "thermal interface material",
-        # 传感/摄像
+        "ceramic material",
+
+        # ── 传感/摄像 ─────────────────────────────────────────────────────
         "under-display camera", "under display fingerprint",
         "ultrasonic fingerprint sensor", "3d sensing module",
         "tof sensor", "lidar module",
-        # 中文
-        "OLED材料", "OLED面板", "MicroLED", "MiniLED",
+
+        # ── 中文通用 ──────────────────────────────────────────────────────
+        "OLED材料", "MicroLED", "MiniLED",
         "固态电池", "硅负极", "硅碳电池", "量子点材料",
         "显示材料", "石墨烯", "碳纳米管", "钙钛矿",
-        "氮化镓材料", "碳化硅材料", "钛合金",
-        "均热板", "热管", "导热材料", "散热材料",
+        "氮化镓材料", "碳化硅材料",
         "屏下摄像头", "屏下指纹", "超声波指纹传感器"
     ]
 
     # T4 High: 明确指出被 OEM 采用（adoption signal）
     ADOPTION_SIGNAL_KEYWORDS = [
-        "used in", "adopted by", "will be used in", "designed for",
+        "used in", "adopted by", "adopted in", "adopted for",
+        "will be used in", "designed for", "designed to be used",
         "integrated into", "equipped with", "built into",
-        "confirmed for", "supplied to", "selected by",
+        "confirmed for", "supplied to", "selected by", "applied to",
         "搭载", "用于", "配备", "内置", "确认采用",
         "供应给", "已应用于", "已用于", "首发于",
-        "将用于", "选定", "选用"
+        "将用于", "选定", "选用", "已搭载", "采用于"
     ]
 
     # T4 Med: 已商业化/量产（需比High更保守）
@@ -377,6 +405,12 @@ class TopicClassifier:
         "路演", "项目路演", "investor pitch", "startup pitch",
         "semiconductor conference", "chip conference", "semi exhibition",
         "半导体展览", "芯片展览",
+        # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
+        "panel shipment", "panel supply chain", "panel price",
+        "display panel supply", "display panel price", "display panel shipment",
+        "panel market", "oled panel price", "lcd panel price",
+        "面板出货", "面板价格", "面板供应链", "面板市场",
+        "出货量下滑", "出货量增长", "出货量数据",
         # 人员变动/协会新闻（无产品）
         "elected president", "new ceo", "appoints ceo", "board member",
         "当选主席", "当选会长",
