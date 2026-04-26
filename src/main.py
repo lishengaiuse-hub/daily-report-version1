@@ -32,10 +32,10 @@ class SamsungIntelligenceSystem:
     """主调度类 - 执行完整的情报处理流水线 v6.0"""
 
     TOPIC_NAMES = {
-        1: "T1 竞品动态",
-        2: "T2 新技术/材料",
-        3: "T3 制造（SEA/India）",
-        4: "T4 行业展会"
+        1: "T1 东南亚消费电子制造扩产",
+        2: "T2 东南亚新建工厂",
+        3: "T3 重大产品发布",
+        4: "T4 新技术/材料"
     }
 
     def __init__(self, config_path: str = "config/config.yaml"):
@@ -91,10 +91,10 @@ class SamsungIntelligenceSystem:
         # 删除原因追踪
         deletion_log: Dict[str, int] = {
             "irrelevant": 0,
+            "semiconductor": 0,
             "duplicate": 0,
             "semantic_duplicate": 0,
             "unsplit": 0,
-            "t4_incomplete": 0,
             "final_gate": 0
         }
 
@@ -124,8 +124,9 @@ class SamsungIntelligenceSystem:
             print("\n🔗 Step 4: Origin tracking...")
             traced = self.tracker.trace_batch(atomic)
 
-            # ── Step 5: 严格分类 + 强相关过滤（不相关 → 删除）─────────────
+            # ── Step 5: 严格分类 + 强相关过滤（不相关/半导体 → 删除）──────────
             print("\n🏷️ Step 5: Strict classification (T1-T4) + relevance filter...")
+            sem_before = self.classifier.stats.get("filtered_semiconductor", 0)
             classified = []
             for article in traced:
                 topics = self.classifier.classify(
@@ -137,12 +138,24 @@ class SamsungIntelligenceSystem:
                     continue
                 article["topics"] = topics
                 article["reliability_score"] = self._get_reliability_score(article.get("source", ""))
-                if 1 in topics:
+                # T3: 设置产品类别 + 优先级
+                if 3 in topics:
                     article["product_category"] = self.classifier.get_product_category(
                         article.get("title", ""),
                         article.get("summary", "")
                     )
+                    article["t3_priority"] = self.classifier.get_t3_priority(
+                        article.get("title", ""),
+                        article.get("summary", "")
+                    )
+                # T4: 设置优先级
+                if 4 in topics:
+                    article["t4_priority"] = self.classifier.get_t4_priority(
+                        article.get("title", ""),
+                        article.get("summary", "")
+                    )
                 classified.append(article)
+            deletion_log["semiconductor"] = self.classifier.stats.get("filtered_semiconductor", 0) - sem_before
 
             # 按 Topic 分组 (T1-T4)
             articles_by_topic: Dict[int, List[Dict]] = {1: [], 2: [], 3: [], 4: []}
@@ -176,8 +189,15 @@ class SamsungIntelligenceSystem:
                         art["topics"] = topics
                         art["reliability_score"] = self._get_reliability_score(art.get("source", ""))
                         art["published_date"] = self.parser.parse_date(art.get("published_raw", ""))
-                        if 1 in topics:
+                        if 3 in topics:
                             art["product_category"] = self.classifier.get_product_category(
+                                art["title"], art.get("summary", "")
+                            )
+                            art["t3_priority"] = self.classifier.get_t3_priority(
+                                art["title"], art.get("summary", "")
+                            )
+                        if 4 in topics:
+                            art["t4_priority"] = self.classifier.get_t4_priority(
                                 art["title"], art.get("summary", "")
                             )
                         classified.append(art)
@@ -225,18 +245,7 @@ class SamsungIntelligenceSystem:
                     if 1 <= tid <= 4:
                         articles_by_topic[tid].append(article)
 
-            # ── Step 8.5: T4 结构校验（缺时间或地点 → 删除）────────────────
-            print("\n📅 Step 8.5: T4 structural validation (time + location required)...")
-            t4_before = len(articles_by_topic[4])
-            valid_t4 = []
-            for article in articles_by_topic[4]:
-                if self.reporter._t4_has_structure(article):
-                    valid_t4.append(article)
-                else:
-                    deletion_log["t4_incomplete"] += 1
-            articles_by_topic[4] = valid_t4
-            t4_removed = t4_before - len(valid_t4)
-            print(f"   ✅ T4: {t4_before} → {len(valid_t4)} ({t4_removed} removed for missing time/location)")
+            # Step 8.5 removed: T4 is now New Technology/Materials (no structural validation needed)
 
             # ── Step 9: AI 摘要 ──────────────────────────────────────────
             print("\n✍️ Step 9: Generating AI summaries...")
