@@ -263,6 +263,10 @@ class SamsungIntelligenceSystem:
                     summarized += 1
             print(f"   ✅ Summarized {summarized} articles")
 
+            # ── Step 9.5: 验证层（T3/T4优先级降级）──────────────────────────
+            print("\n✅ Step 9.5: Validation layer (priority downgrade)...")
+            self.classifier.validate_batch(final_articles)
+
             # ── Step 10: 最终QA清洗关卡（输出前逐条校验）────────────────────
             print("\n🚨 Step 10: Final QA gate (5-point check, delete on failure)...")
             articles_by_topic = self.reporter.final_qa_gate(articles_by_topic, deletion_log)
