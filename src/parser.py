@@ -201,7 +201,7 @@ class ArticleParser:
         }
         
         for month_name, month_num in month_names.items():
-            pattern = rf'{month_name}\s+(\d{{1,2}}),?\s+(\d{{4}})', re.IGNORECASE
+            pattern = rf'{month_name}\s+(\d{{1,2}}),?\s+(\d{{4}})'
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 try:
@@ -369,3 +369,4 @@ class ArticleParser:
         words = [w for w in words if w not in noise_words]
         
         return ' '.join(words)
+
