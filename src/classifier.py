@@ -69,7 +69,9 @@ class TopicClassifier:
         # 已知CE代工厂 / OEM品牌（品牌名本身即代表CE相关）
         "foxconn", "富士康", "pegatron", "wistron", "compal", "luxshare",
         "boe", "lg display", "samsung display", "csot", "tianma",
-        "apple", "google", "microsoft",   # 主要CE OEM
+        "samsung", "apple", "google", "microsoft",
+        "lg electronics", "lg appliance", "sony electronics", "panasonic",
+        "sharp electronics", "toshiba", "hitachi",
         "iphone", "galaxy", "pixel", "surface",
         "xiaomi", "huawei", "oppo", "vivo", "honor",
         # 组件/供应链（CE专属）
@@ -84,10 +86,12 @@ class TopicClassifier:
         # EN — explicit expansion
         "expand", "expansion", "expanding", "expanded",
         "increase capacity", "additional capacity", "capacity increase", "capacity expansion",
-        "boost production", "boost capacity",
+        "boost production", "boost capacity", "boosts production", "boosts capacity",
         "ramp up", "ramp up production", "ramps up", "ramping up",
         "scale up", "scale up production", "scale production",
         "scales up", "scaling up", "stepped up", "step up production",
+        "increase production", "increasing production", "increase manufacturing",
+        "production capacity", "manufacturing capacity",   # 明确提到产能（配合SEA+CE上下文）
         "accelerates investment", "accelerate production", "accelerating investment",
         "invest in existing", "additional investment", "increasing investment",
         "upgrade facility", "upgrade production",
@@ -117,12 +121,16 @@ class TopicClassifier:
     NEW_FACTORY_KEYWORDS = [
         # EN
         "new factory", "new plant", "new facility", "new manufacturing facility",
-        "groundbreaking", "break ground", "greenfield",
+        "groundbreaking", "break ground", "breaks ground", "broke ground", "greenfield",
         "construction of factory", "build factory", "building factory",
         "set up manufacturing", "establish manufacturing",
         "brand new factory", "first factory in", "first plant in",
         "open new factory", "open new plant", "new assembly plant",
         "new production site", "new manufacturing hub", "new manufacturing base",
+        "new appliance plant", "new appliance factory", "new appliance manufacturing",
+        "new smartphone plant", "new smartphone factory",
+        "new phone plant", "new phone factory",
+        "new electronics plant", "new electronics factory",
         "invest in new facility", "build new site",
         # CN
         "新工厂", "新建工厂", "奠基", "开工", "兴建", "建厂",
