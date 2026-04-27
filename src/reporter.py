@@ -43,23 +43,28 @@ class ReportGenerator:
         "low":  "🟢 LOW"
     }
 
-    # ALERTS 四大判断维度（≥2 个才进入 ALERTS）
+    # ALERTS 四大判断维度（必须 ≥2 个维度关键词命中）
+    # 每个维度通过关键词硬判断，不依赖语义理解，确保可操作
     ALERT_CRITERIA = {
-        "impacts_industry": [
-            "market share", "市场份额", "competitor", "竞争", "rival",
-            "overtake", "disruption", "breakthrough", "突破", "颠覆", "超越"
+        "industry_disruption": [
+            "competitor", "market share", "replace", "disrupt", "overtake", "rival",
+            "beats", "surpass", "dethrone",
+            "市场份额", "竞争对手", "竞争", "超越", "颠覆", "取代", "领先"
         ],
-        "core_tech": [
-            "microled", "oled", "solid state battery", "semiconductor", "display panel",
-            "processor", "处理器", "面板", "固态电池", "芯片"
+        "core_technology": [
+            "oled", "microled", "mini-led", "battery", "chipset", "processor",
+            "display panel", "npu", "solid state", "silicon anode",
+            "芯片", "面板", "电池", "处理器", "固态电池", "显示技术"
         ],
         "supply_chain_risk": [
-            "supply chain", "供应链", "shortage", "短缺", "sanction", "制裁",
-            "export ban", "出口禁令", "tariff", "关税", "disruption", "断供"
+            "shortage", "tariff", "sanction", "supply chain", "export ban",
+            "supply disruption", "bottleneck",
+            "短缺", "关税", "制裁", "供应链", "出口禁令", "断供", "瓶颈"
         ],
         "major_investment": [
-            "investment", "投资", "billion", "亿", "expansion", "扩产",
-            "new factory", "新工厂", "建厂", "capacity increase", "产能"
+            "investment", "billion", "capacity", "new factory", "expansion",
+            "greenfield", "manufacturing plant", "facility",
+            "投资", "亿", "产能", "新工厂", "扩产", "建厂", "制造基地"
         ]
     }
 
@@ -424,7 +429,14 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
 
         source_note = " ⚠️" if unreliable else ""
         lines.append(f"**{pub_date} · {source}{source_note}**")
-        lines.append(f"[{title_display}]({link})")
+
+        # 链接规则：仅当有真实 URL 时才生成超链接，无 URL → 纯文本（防止幻觉）
+        has_url = link and link not in ("#", "", "unknown")
+        if has_url:
+            lines.append(f"[{title_display}]({link})")
+        else:
+            lines.append(title_display)
+
         if summary:
             clean = summary.strip()[:350].replace("\n", " ")
             lines.append(f"{clean}")
