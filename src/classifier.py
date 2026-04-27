@@ -332,10 +332,15 @@ class TopicClassifier:
         "will be used in", "designed for", "designed to be used",
         "integrated into", "equipped with", "built into",
         "confirmed for", "supplied to", "selected by", "applied to",
+        "starts shipping", "start shipping", "begins shipping", "begin shipping",
+        "now shipping", "started shipping", "shipping its",
+        "powered by", "running on", "features mini-led", "features microled",
+        "officially launched", "starts selling", "now on sale",
         "搭载", "用于", "配备", "内置", "确认采用",
         "供应给", "供应", "供屏", "供货",
         "已应用于", "已用于", "首发于",
-        "将用于", "选定", "选用", "已搭载", "采用于"
+        "将用于", "选定", "选用", "已搭载", "采用于",
+        "正式量产", "开始出货", "开始销售"
     ]
 
     # T4 Med: 已商业化/量产（需比High更保守）
@@ -444,6 +449,17 @@ class TopicClassifier:
         # CEO/高管/企业战略（无具体产品发布）
         "新任ceo", "新任 ceo", "留下十大", "产品线研发计划", "就职后",
         "管理层更迭", "继任者", "接班人", "apple ceo", "new ceo announced",
+        # 软件钱包/行程功能/数字服务（非CE硬件）
+        "samsung wallet", "wallet new trips", "trips feature", "digital id feature",
+        "wallet feature", "wallet app feature",
+        # Android Launcher 技巧/玩法文章
+        "android launcher", "turned my phone into", "quirky launcher",
+        # 面板/显示出货量统计数据（市场分析报告）
+        "display shipments are expected", "amoled smartphone display shipments",
+        "display shipments expected", "panel shipments expected",
+        "shipments are expected to decline", "shipments expected to decline",
+        # 行业奖项（企业荣誉，非产品发布）
+        "corporate innovation award", "ieee award", "受颁", "荣获奖",
         # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
         "panel shipment", "panel supply chain", "panel price",
         "display panel supply", "display panel price", "display panel shipment",
@@ -729,15 +745,16 @@ class TopicClassifier:
             return False, ""
 
         # Gate 2: 排除产品发布/评测/价格新闻（属于 T3 领域）
-        # 例外：供应商供货通知（如"TCL供应LTPS面板给Redmi"）保留在T4
-        #       判断：供应商主导(SUPPLIER_LED_PATTERNS)允许通过，品牌产品发布排除
+        # 例外1：供应商供货通知（TCL供应LTPS面板给Redmi）→ 保留在T4
+        # 例外2：含明确adoption信号（Samsung ships MicroLED TV）→ 保留在T4 High
         is_ce_product_article = any(kw.lower() in text for kw in self.VALID_PRODUCTS)
         has_launch_or_review = any(kw.lower() in text for kw in
                                    self.LAUNCH_KEYWORDS + self.REVIEW_KEYWORDS + self.PRICING_KEYWORDS)
         is_supplier_article = any(kw.lower() in text for kw in self.SUPPLIER_LED_PATTERNS)
+        has_adoption = any(kw.lower() in text for kw in self.ADOPTION_SIGNAL_KEYWORDS)
 
-        if is_ce_product_article and has_launch_or_review and not is_supplier_article:
-            return False, ""   # 产品发布/评测/价格归 T3，不归 T4
+        if is_ce_product_article and has_launch_or_review and not is_supplier_article and not has_adoption:
+            return False, ""   # 产品发布/评测/价格（无采用信号）归 T3，不归 T4
 
         # Gate 3: 必须有 CE 应用链接（技术落地到CE产品或CE品牌上）
         CE_LINK_KEYWORDS = [
