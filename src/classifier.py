@@ -33,14 +33,25 @@ class TopicClassifier:
     # 地理约束 (T1/T2 强制)
     # ──────────────────────────────────────────────
     SEA_LOCATIONS = [
+        # 中文通用区域词（中文语境下较精确）
+        "东南亚", "南亚",
+        # 注：不含英文通用词 "southeast asia"/"apac"——太宽泛会引入旅游/金融等无关内容
+        # 越南
         "vietnam", "viet nam", "越南", "hanoi", "ho chi minh", "haiphong", "bac ninh", "thai nguyen",
+        # 泰国
         "thailand", "thai", "bangkok", "泰国", "曼谷", "rayong", "chonburi",
-        "indonesia", "jakarta", "印尼", "雅加达", "batam", "karawang",
+        # 印尼
+        "indonesia", "jakarta", "印尼", "印度尼西亚", "雅加达", "batam", "karawang",
+        # 马来西亚
         "malaysia", "kuala lumpur", "penang", "马来西亚", "吉隆坡", "槟城", "selangor", "johor", "kulim",
+        # 新加坡
         "singapore", "新加坡",
+        # 菲律宾
         "philippines", "manila", "菲律宾", "马尼拉",
+        # 印度
         "india", "new delhi", "mumbai", "bangalore", "chennai", "noida", "gurugram", "hyderabad",
         "印度", "新德里", "孟买", "班加罗尔", "钦奈", "诺伊达",
+        # 孟加拉/缅甸/柬埔寨
         "bangladesh", "dhaka", "孟加拉", "达卡",
         "myanmar", "cambodia", "缅甸", "柬埔寨"
     ]
@@ -93,7 +104,12 @@ class TopicClassifier:
         "increase production", "increasing production", "increase manufacturing",
         "production capacity", "manufacturing capacity",   # 明确提到产能（配合SEA+CE上下文）
         "accelerates investment", "accelerate production", "accelerating investment",
-        "invest in existing", "additional investment", "increasing investment",
+        # 投资扩产（用短语而非单词，避免误匹配）
+        "invests in", "investing in", "invested in",
+        "plans to invest", "will invest", "to invest $",
+        "billion investment", "million investment",
+        "additional investment", "increasing investment", "increase investment",
+        "invest in existing",
         "upgrade facility", "upgrade production",
         "add production line", "add assembly line",
         "double capacity", "triple capacity", "lift production",
