@@ -246,7 +246,10 @@ class ReportGenerator:
                 tiers[a.get(priority_key, "low")].append(a)
 
             tier_html = ""
-            for tier_name, tier_arts in tiers.items():
+            # Topic3: Low先于Med（价格信息更具采购参考价值）
+            display_order = ["high", "low", "med"] if tid == 3 else ["high", "med", "low"]
+            for tier_name in display_order:
+                tier_arts = tiers[tier_name]
                 if not tier_arts:
                     continue
                 tier_label = {"high": "🔴 High Priority", "med": "🟡 Med Priority", "low": "🟢 Low Priority"}[tier_name]
@@ -378,7 +381,11 @@ body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-
             "med":  "### [Med Priority]",
             "low":  "### [Low Priority]"
         }
-        for tier_name, tier_arts in tiers.items():
+        # Topic3: Low(价格/传言) 先于 Med(评测) 显示，因价格信息更具采购参考价值
+        display_order = ["high", "low", "med"] if tid == 3 else ["high", "med", "low"]
+
+        for tier_name in display_order:
+            tier_arts = tiers[tier_name]
             lines.append(tier_labels[tier_name])
             lines.append("")
             if not tier_arts:
