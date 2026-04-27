@@ -513,6 +513,11 @@ class TopicClassifier:
         "amazon basics", "amazon fire tv", "amazon fire stick",
         "苏宁易购发布", "苏宁首发", "国美首发", "国美电器发布",
         "家电零售", "零售商发布",
+        # ── 家电服务商新闻（维修/安装/售后/评测服务商）────────────────────
+        "家电服务商", "家电维修商", "家电服务商综合评测", "服务商综合评测",
+        "家电安装", "家电维修", "家电售后", "上门维修",
+        "appliance service provider", "appliance repair service",
+        "home appliance service provider", "appliance maintenance",
         # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
         "panel shipment", "panel supply chain", "panel price",
         "display panel supply", "display panel price", "display panel shipment",
