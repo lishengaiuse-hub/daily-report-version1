@@ -831,23 +831,29 @@ class TopicClassifier:
         if is_samsung_primary and not is_samsung_display:
             return False, ""   # 三星自有产品/服务 → 排除（Samsung Display技术除外）
 
-        # Gate 3: 必须有 CE 应用链接（技术落地到CE产品上）
+        # Gate 3: 必须有 CE 应用链接（技术落地到CE产品或电子产品领域）
         # 注意：用精确词汇，避免"mobile"误匹配"China Mobile"等电信公司名
         CE_LINK_KEYWORDS = [
             "smartphone", "mobile phone", "mobile device", "iphone", "galaxy", "pixel",
             "television", "smart tv", "home appliance",
-            "consumer electronics", "electronic device",
+            "consumer electronics", "electronic device", "electronic product",
             "wearable device", "tablet computer", "laptop computer", "earbuds",
-            "手机", "智能手机", "电视", "家电", "消费电子", "平板电脑", "笔记本电脑"
+            # 材料类特有CE应用词（散热膜/机身材料等供应链语境）
+            "phone thermal", "phone cooling", "phone heat",
+            "phone chassis", "phone body", "phone casing", "phone frame",
+            "smartphone thermal", "smartphone heat", "smartphone cooling",
+            "appliance thermal", "appliance heat",
+            "散热膜", "散热片", "手机散热", "手机机身", "手机壳体",
+            "手机", "智能手机", "电视", "家电", "消费电子", "平板电脑", "笔记本电脑",
+            "电子功能材料", "电子产品", "消费类电子"
         ]
-        # 品牌名检查（更保守：只用 CE_INDUSTRY_KEYWORDS 中明确的CE品牌，不用 "mobile" 这类通用词）
         CE_BRAND_KEYWORDS = [
             "iphone", "ipad", "macbook",
             "galaxy", "pixel", "xperia",
             "xiaomi", "redmi", "huawei", "oppo", "vivo", "honor", "realme", "oneplus",
             "apple tv", "samsung tv", "lg tv", "sony tv", "tcl tv",
             "foxconn", "pegatron", "luxshare", "lg display", "samsung display",
-            "手机", "电视", "家电", "平板"   # 中文CE产品类型
+            "手机", "电视", "家电", "平板"
         ]
         has_ce_link = (
             any(kw.lower() in text for kw in CE_LINK_KEYWORDS) or
