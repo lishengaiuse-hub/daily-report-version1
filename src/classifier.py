@@ -190,22 +190,40 @@ class TopicClassifier:
         "据悉", "内部消息", "消息人士", "知情人士", "博主透露", "博主爆料"
     ]
 
-    # ──────────────────────────────────────────────
-    # 三星产品过滤（T3 High/Low 排除三星自有产品，仅允许评测）
-    # ──────────────────────────────────────────────
-    # 判断文章是否以三星自有产品/功能为主体
-    SAMSUNG_OWN_PRODUCT_KEYWORDS = [
-        # 三星产品线名称（在标题中出现）
+    # ──────────────────────────────────────────────────────────────────
+    # 三星过滤（全局规则）
+    # 规则：报告不包含三星自有新闻，以下例外允许提及三星：
+    #   1. 竞品对比分析（多品牌评测/榜单，三星作为被比较对象之一）
+    #   2. 供应商供货分析（Samsung Display作为面板供应商技术，T4）
+    #   3. SEA制造投资（T1/T2，三星工厂/制造扩张属于竞争情报）
+    # ──────────────────────────────────────────────────────────────────
+
+    # 三星主体文章关键词（标题中出现 → 三星是主角 → 排除）
+    SAMSUNG_PRIMARY_KEYWORDS = [
+        # 产品线
         "samsung galaxy", "galaxy s2", "galaxy s1", "galaxy z fold", "galaxy z flip",
         "galaxy a5", "galaxy a3", "galaxy tab s", "galaxy watch", "galaxy buds",
         "galaxy book", "galaxy ring", "galaxy ai",
         "samsung neo qled", "samsung qled", "samsung oled tv", "samsung frame tv",
         "samsung bespoke", "samsung unpacked",
-        "samsung announces", "samsung unveils", "samsung launches",
-        "samsung introduces", "samsung reveals",
-        # 中文三星产品
-        "三星Galaxy", "三星发布", "三星推出", "三星亮相", "三星宣布",
+        # 三星动作（以三星为主语）
+        "samsung announces", "samsung unveils", "samsung launches", "samsung ships",
+        "samsung shipping", "samsung starts shipping", "samsung introduces",
+        "samsung reveals", "samsung elevates", "samsung updates", "samsung starts",
+        "samsung rolls out", "samsung releases",
+        # 三星平台/服务
+        "smartthings", "samsung wallet", "samsung health", "samsung pay",
+        "samsung account", "bixby",
+        # 中文
+        "三星Galaxy", "三星发布", "三星推出", "三星亮相", "三星宣布", "三星开始",
+        "三星更新", "三星升级", "三星推送",
         "Galaxy S", "Galaxy Z", "Galaxy A", "Galaxy Tab S", "Galaxy Watch"
+    ]
+
+    # 例外：Samsung Display作为面板技术供应商（T4允许）
+    SAMSUNG_DISPLAY_SUPPLIER_KEYWORDS = [
+        "samsung display", "qd-oled panel", "samsung amoled",
+        "samsung display panel", "samsung oled panel"
     ]
 
     # T3 产品白名单（必须命中才允许进入 Topic3）
@@ -751,11 +769,11 @@ class TopicClassifier:
         is_rumor = any(kw.lower() in text for kw in self.RUMOR_KEYWORDS)
         has_model = self._has_product_model(title + " " + text)
 
-        # Gate 3: 三星自有产品过滤
-        # 规则：三星产品 → 仅允许评测（Med）；发布/定价文章排除
-        is_samsung_product = any(kw.lower() in text for kw in self.SAMSUNG_OWN_PRODUCT_KEYWORDS)
-        if is_samsung_product and not has_review:
-            return False, ""   # 三星产品发布/定价 → 排除；三星产品评测 → 保留
+        # Gate 3: 三星过滤（全局规则）
+        # 三星为主角 → 仅允许评测（Med）；其余全部排除
+        is_samsung_primary = any(kw.lower() in text for kw in self.SAMSUNG_PRIMARY_KEYWORDS)
+        if is_samsung_primary and not has_review:
+            return False, ""   # 三星发布/定价/功能 → 排除；三星评测 → 保留(Med)
 
         # 优先级判断（严格顺序）
         if has_launch and has_model and not is_rumor:
@@ -796,6 +814,14 @@ class TopicClassifier:
 
         if is_ce_product_article and has_launch_or_review and not is_supplier_article and not has_adoption:
             return False, ""   # 产品发布/评测/价格（无采用信号）归 T3，不归 T4
+
+        # Gate 2.5: 三星过滤（全局规则）
+        # 三星自有产品/服务为主角 → 排除
+        # 例外：Samsung Display作为面板技术供应商（竞品分析允许）
+        is_samsung_primary = any(kw.lower() in text for kw in self.SAMSUNG_PRIMARY_KEYWORDS)
+        is_samsung_display = any(kw.lower() in text for kw in self.SAMSUNG_DISPLAY_SUPPLIER_KEYWORDS)
+        if is_samsung_primary and not is_samsung_display:
+            return False, ""   # 三星自有产品/服务 → 排除（Samsung Display技术除外）
 
         # Gate 3: 必须有 CE 应用链接（技术落地到CE产品上）
         # 注意：用精确词汇，避免"mobile"误匹配"China Mobile"等电信公司名
