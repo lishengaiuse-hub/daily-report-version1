@@ -190,6 +190,24 @@ class TopicClassifier:
         "据悉", "内部消息", "消息人士", "知情人士", "博主透露", "博主爆料"
     ]
 
+    # ──────────────────────────────────────────────
+    # 三星产品过滤（T3 High/Low 排除三星自有产品，仅允许评测）
+    # ──────────────────────────────────────────────
+    # 判断文章是否以三星自有产品/功能为主体
+    SAMSUNG_OWN_PRODUCT_KEYWORDS = [
+        # 三星产品线名称（在标题中出现）
+        "samsung galaxy", "galaxy s2", "galaxy s1", "galaxy z fold", "galaxy z flip",
+        "galaxy a5", "galaxy a3", "galaxy tab s", "galaxy watch", "galaxy buds",
+        "galaxy book", "galaxy ring", "galaxy ai",
+        "samsung neo qled", "samsung qled", "samsung oled tv", "samsung frame tv",
+        "samsung bespoke", "samsung unpacked",
+        "samsung announces", "samsung unveils", "samsung launches",
+        "samsung introduces", "samsung reveals",
+        # 中文三星产品
+        "三星Galaxy", "三星发布", "三星推出", "三星亮相", "三星宣布",
+        "Galaxy S", "Galaxy Z", "Galaxy A", "Galaxy Tab S", "Galaxy Watch"
+    ]
+
     # T3 产品白名单（必须命中才允许进入 Topic3）
     # 包含产品类型名称 + 知名CE设备品牌/产品线（这些名称本身就代表CE产品）
     VALID_PRODUCTS = [
@@ -716,11 +734,17 @@ class TopicClassifier:
         is_rumor = any(kw.lower() in text for kw in self.RUMOR_KEYWORDS)
         has_model = self._has_product_model(title + " " + text)
 
+        # Gate 3: 三星自有产品过滤
+        # 规则：三星产品 → 仅允许评测（Med）；发布/定价文章排除
+        is_samsung_product = any(kw.lower() in text for kw in self.SAMSUNG_OWN_PRODUCT_KEYWORDS)
+        if is_samsung_product and not has_review:
+            return False, ""   # 三星产品发布/定价 → 排除；三星产品评测 → 保留
+
         # 优先级判断（严格顺序）
         if has_launch and has_model and not is_rumor:
             return True, "high"   # 真实发布 + 明确型号 + 非传言
         if has_review and not is_rumor:
-            return True, "med"    # 真实评测
+            return True, "med"    # 真实评测（含三星产品评测）
         if has_pricing:
             return True, "low"    # 价格新闻
         if has_launch or has_review:
