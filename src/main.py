@@ -110,9 +110,10 @@ class SamsungIntelligenceSystem:
             raw_count = len(articles)
 
             # ── Step 2: 解析 ─────────────────────────────────────────────
+            # days_back=7: T1/T2 SEA制造新闻频率低（周级别），3天过滤会漏掉大部分
             print("\n📝 Step 2: Parsing articles...")
-            parsed = self.parser.parse_batch(articles, days_back=3)
-            print(f"   ✅ Parsed {len(parsed)} articles (3-day recency filter)")
+            parsed = self.parser.parse_batch(articles, days_back=7)
+            print(f"   ✅ Parsed {len(parsed)} articles (7-day recency filter)")
 
             # ── Step 3: 强制原子化（聚合无法拆分 → 直接删除）─────────────
             print("\n✂️ Step 3: Atomic splitting (unsplittable aggregates DELETED)...")
