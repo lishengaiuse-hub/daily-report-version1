@@ -296,7 +296,7 @@ class TopicClassifier:
     # ──────────────────────────────────────────────
     MATERIAL_KEYWORDS = [
         # ── 显示技术（技术本身，非供应链价格/出货量）──────────────────────
-        "oled material", "oled panel technology", "oled stack",
+        "oled material", "oled panel", "oled panels", "oled panel technology", "oled stack",
         "microled", "micro-led", "micro led",
         "miniled", "mini-led", "mini led",
         "qd-oled", "quantum dot material", "display material",
@@ -370,6 +370,9 @@ class TopicClassifier:
         "confirmed for", "supplied to", "selected by", "applied to",
         "starts shipping", "start shipping", "begins shipping", "begin shipping",
         "now shipping", "started shipping", "shipping its",
+        "has shipped", "already shipped", "shipped over",
+        "first to adopt", "will adopt", "to adopt", "adopts",
+        "will be the first", "first smartphone to",
         "powered by", "running on", "features mini-led", "features microled",
         "officially launched", "starts selling", "now on sale",
         "搭载", "用于", "配备", "内置", "确认采用",
