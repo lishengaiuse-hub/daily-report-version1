@@ -478,6 +478,23 @@ class TopicClassifier:
         "shipments are expected to decline", "shipments expected to decline",
         # 行业奖项（企业荣誉，非产品发布）
         "corporate innovation award", "ieee award", "受颁", "荣获奖",
+        # ── 新闻聚合/日报摘要（一篇包含多条不相干新闻）────────────────────
+        "要闻提示", "今日要闻", "早报 快讯", "新闻速递", "每日快报",
+        "news roundup", "daily digest", "morning brief", "evening brief",
+        "news wrap", "weekly wrap", "top stories today",
+        # ── 电信运营商产品数据库/入网认证（非正式产品发布）──────────────────
+        "终端产品库", "中国电信终端", "中国联通终端", "中国移动终端",
+        "入网认证", "获得入网许可", "工信部入网", "入网批文",
+        "现身终端产品库", "出现在.*产品库", "运营商.*产品库",
+        "fcc certification", "fcc listing", "fcc database",
+        "network access certification", "telecom certification",
+        # ── 家电零售商新闻（沃尔玛/百思买/苏宁/国美等）────────────────────
+        "walmart's new", "walmart launches", "walmart onn",
+        "onn 4k", "onn streaming",   # 沃尔玛自有品牌
+        "best buy deal", "best buy launch", "costco electronics deal",
+        "amazon basics", "amazon fire tv", "amazon fire stick",
+        "苏宁易购发布", "苏宁首发", "国美首发", "国美电器发布",
+        "家电零售", "零售商发布",
         # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
         "panel shipment", "panel supply chain", "panel price",
         "display panel supply", "display panel price", "display panel shipment",
