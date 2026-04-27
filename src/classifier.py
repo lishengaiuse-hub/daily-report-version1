@@ -131,6 +131,8 @@ class TopicClassifier:
         "new smartphone plant", "new smartphone factory",
         "new phone plant", "new phone factory",
         "new electronics plant", "new electronics factory",
+        "new manufacturing plant", "build new plant",
+        "new pcb plant", "new pcb factory",
         "invest in new facility", "build new site",
         # CN
         "新工厂", "新建工厂", "奠基", "开工", "兴建", "建厂",
@@ -454,9 +456,15 @@ class TopicClassifier:
         "xperia", "sony", "lg electronics", "tcl", "hisense", "sharp", "panasonic",
         "motorola", "lenovo", "asus", "oneplus", "realme", "transsion", "tecno",
         "小米", "华为", "荣耀", "apple", "苹果", "索尼", "海信", "夏普", "松下",
-        "foxconn", "富士康", "pegatron", "display panel", "面板",
+        "google", "samsung", "tata electronics", "bizlink",  # T1/T2 常见公司
+        "foxconn", "富士康", "pegatron", "luxshare", "立讯",
+        "display panel", "面板",
         "oled", "microled", "miniled",
-        "battery", "电池", "solid state"
+        "battery", "电池", "solid state",
+        # T1/T2 制造关键词（确保制造扩产文章通过相关性检查）
+        "electronics manufacturing", "electronics factory", "electronics plant",
+        "phone manufacturing", "appliance manufacturing",
+        "电子制造", "手机制造", "家电制造", "电子工厂"
     ]
 
     # 跨栏目去重优先级 (T1 最高)
