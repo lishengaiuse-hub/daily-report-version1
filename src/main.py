@@ -110,15 +110,17 @@ class SamsungIntelligenceSystem:
             raw_count = len(articles)
 
             # ── Step 2: 解析 ─────────────────────────────────────────────
-            # days_back=31: T1/T2 SEA制造新闻按月搜索，覆盖当月所有新闻
-            # T3/T4产品新闻也保留当月内容，避免重复报道
+            # days_back策略：
+            #   T1/T2/T3: 覆盖当月（当月已过天数）
+            #   T4: 技术/材料新闻频率低、峰值在CES/MWC（1-3月），需要更长回溯
+            #   综合取 max(days_this_month, 60)，保证T4有足够内容
             from datetime import datetime as _dt
             _today = _dt.now()
-            # 动态计算当月已过天数（确保覆盖整个当月）
             days_this_month = _today.day + 1
+            days_back = max(days_this_month, 60)   # T4需要最多60天回溯
             print("\n📝 Step 2: Parsing articles...")
-            parsed = self.parser.parse_batch(articles, days_back=days_this_month)
-            print(f"   ✅ Parsed {len(parsed)} articles ({days_this_month}-day window, covers full current month)")
+            parsed = self.parser.parse_batch(articles, days_back=days_back)
+            print(f"   ✅ Parsed {len(parsed)} articles ({days_back}-day window, T1-T3 current month, T4 up to 60d)")
 
             # ── Step 3: 强制原子化（聚合无法拆分 → 直接删除）─────────────
             print("\n✂️ Step 3: Atomic splitting (unsplittable aggregates DELETED)...")
