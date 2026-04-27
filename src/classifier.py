@@ -180,6 +180,9 @@ class TopicClassifier:
         "allegedly", "sources say", "said to", "tipped", "unconfirmed",
         "render", "renders", "concept", "expected to", "may feature",
         "could launch", "might launch",
+        "could sport", "could feature", "could get", "could include",
+        "could arrive", "could come with", "could offer", "could bring",
+        "might sport", "might feature", "might get", "might include",
         "传言", "传闻", "曝光", "爆料", "疑似", "据传", "据报道", "消息称",
         "渲染图", "渲染", "泄露", "疑曝", "可能搭载", "预计发布",
         "曝 ", "曝三", "曝苹", "曝小", "曝华",  # 中文"曝"作为首词
@@ -398,9 +401,10 @@ class TopicClassifier:
         "软件更新", "系统更新", "固件升级", "生态系统", "AI聊天", "AI助手应用",
         "AI大模型", "大语言模型",
         # 流媒体/娱乐内容（Apple TV+等）
-        "apple tv+", "streaming service", "tv show", "tv series", "tv comedy",
-        "tv drama", "streaming content", "original series", "new comedy",
-        "new series", "movie premiere", "film review",
+        "apple tv+", "streaming service", "tv show", "tv comedy",
+        "tv drama", "streaming content", "streaming series",
+        "new comedy series", "movie premiere", "film review",
+        # 注意: "tv series" 太宽泛 → 会误杀 "Mini LED TV series"（产品线）
         "流媒体", "电视剧", "综艺", "电影首映", "剧集",
         # 生活方式/人物专访/社论
         "lifestyle", "人物专访", "建筑设计师", "阅读清单", "碎片时间",
@@ -434,6 +438,12 @@ class TopicClassifier:
         "security feature", "automatically enables", "ios security",
         "android security patch", "security update",
         "enables this iphone", "iphone security feature",
+        # 掩膜版/光掩模（半导体光刻制造设备/耗材，非CE技术）
+        "掩膜版", "光掩模", "光罩", "photomask", "mask blank", "mask aligner",
+        "掩膜版产", "高精度掩膜",
+        # CEO/高管/企业战略（无具体产品发布）
+        "新任ceo", "新任 ceo", "留下十大", "产品线研发计划", "就职后",
+        "管理层更迭", "继任者", "接班人", "apple ceo", "new ceo announced",
         # 显示面板供应链/价格/出货量数据（市场数据，非技术新闻）
         "panel shipment", "panel supply chain", "panel price",
         "display panel supply", "display panel price", "display panel shipment",
@@ -718,14 +728,16 @@ class TopicClassifier:
         if not any(kw.lower() in text for kw in self.MATERIAL_KEYWORDS):
             return False, ""
 
-        # Gate 2: 排除纯产品价格新闻（定价新闻属于 T3 领域）
-        # 注意：只排除 PRICING，不排除 LAUNCH（材料采用通知也会用 "announce"）
-        is_product_pricing = (
-            any(kw.lower() in text for kw in self.VALID_PRODUCTS) and
-            any(kw.lower() in text for kw in self.PRICING_KEYWORDS)
-        )
-        if is_product_pricing:
-            return False, ""   # 价格新闻归 T3 Low，不归 T4
+        # Gate 2: 排除产品发布/评测/价格新闻（属于 T3 领域）
+        # 例外：供应商供货通知（如"TCL供应LTPS面板给Redmi"）保留在T4
+        #       判断：供应商主导(SUPPLIER_LED_PATTERNS)允许通过，品牌产品发布排除
+        is_ce_product_article = any(kw.lower() in text for kw in self.VALID_PRODUCTS)
+        has_launch_or_review = any(kw.lower() in text for kw in
+                                   self.LAUNCH_KEYWORDS + self.REVIEW_KEYWORDS + self.PRICING_KEYWORDS)
+        is_supplier_article = any(kw.lower() in text for kw in self.SUPPLIER_LED_PATTERNS)
+
+        if is_ce_product_article and has_launch_or_review and not is_supplier_article:
+            return False, ""   # 产品发布/评测/价格归 T3，不归 T4
 
         # Gate 3: 必须有 CE 应用链接（技术落地到CE产品或CE品牌上）
         CE_LINK_KEYWORDS = [
