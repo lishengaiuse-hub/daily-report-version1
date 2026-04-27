@@ -797,17 +797,27 @@ class TopicClassifier:
         if is_ce_product_article and has_launch_or_review and not is_supplier_article and not has_adoption:
             return False, ""   # 产品发布/评测/价格（无采用信号）归 T3，不归 T4
 
-        # Gate 3: 必须有 CE 应用链接（技术落地到CE产品或CE品牌上）
+        # Gate 3: 必须有 CE 应用链接（技术落地到CE产品上）
+        # 注意：用精确词汇，避免"mobile"误匹配"China Mobile"等电信公司名
         CE_LINK_KEYWORDS = [
-            "phone", "smartphone", "mobile", "iphone", "galaxy", "pixel",
-            "tv", "television", "home appliance",
-            "consumer electronics", "electronic device", "electronics",
-            "wearable", "tablet", "laptop", "earbuds",
-            "手机", "电视", "家电", "消费电子", "显示器"
+            "smartphone", "mobile phone", "mobile device", "iphone", "galaxy", "pixel",
+            "television", "smart tv", "home appliance",
+            "consumer electronics", "electronic device",
+            "wearable device", "tablet computer", "laptop computer", "earbuds",
+            "手机", "智能手机", "电视", "家电", "消费电子", "平板电脑", "笔记本电脑"
+        ]
+        # 品牌名检查（更保守：只用 CE_INDUSTRY_KEYWORDS 中明确的CE品牌，不用 "mobile" 这类通用词）
+        CE_BRAND_KEYWORDS = [
+            "iphone", "ipad", "macbook",
+            "galaxy", "pixel", "xperia",
+            "xiaomi", "redmi", "huawei", "oppo", "vivo", "honor", "realme", "oneplus",
+            "apple tv", "samsung tv", "lg tv", "sony tv", "tcl tv",
+            "foxconn", "pegatron", "luxshare", "lg display", "samsung display",
+            "手机", "电视", "家电", "平板"   # 中文CE产品类型
         ]
         has_ce_link = (
             any(kw.lower() in text for kw in CE_LINK_KEYWORDS) or
-            any(kw.lower() in text for kw in self.CE_INDUSTRY_KEYWORDS)  # 包含品牌名
+            any(kw.lower() in text for kw in CE_BRAND_KEYWORDS)
         )
         if not has_ce_link:
             return False, ""
