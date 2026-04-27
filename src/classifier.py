@@ -166,12 +166,33 @@ class TopicClassifier:
         "monitor", "显示器"
     ]
 
-    # T3 产品发布关键词（仅限实际发布，不含传言/泄露）
+    # T3 一般发布信号词（用于 Gate 2 — 判断是否属于 T3 范畴）
     LAUNCH_KEYWORDS = [
         "launch", "announce", "release", "unveil", "debut", "introduce",
         "goes on sale", "ships", "shipping", "officially launched",
         "发布", "推出", "上市", "发售", "亮相", "首发", "宣布",
         "开售", "正式发布", "正式推出", "specs confirmed", "规格确认", "确认搭载"
+    ]
+
+    # T3 High 专用：明确发布/上市行为词（必须命中才能进入 High）
+    # 区别：仅含真实发布行为，不含"规格确认/specs confirmed"等非发布词
+    LAUNCH_ACTION_KEYWORDS = [
+        # 带 "officially" 前缀的短语（负面语境中极少出现）
+        "officially launched", "officially released", "officially announced",
+        "officially unveiled", "officially introduced", "officially ships",
+        # 现在时（launches/ships — 表示当前正在发布）
+        "launches", "unveils", "ships", "debuts",
+        # 无歧义过去式
+        "debuted", "unveiled",
+        # 销售上市信号
+        "goes on sale", "now on sale", "now available for",
+        "available for purchase", "available to buy",
+        # 中文发布行为词（中文语境中"正式"起到限定作用）
+        "正式发布", "正式推出", "正式宣布", "正式上市",
+        "正式开售", "正式发售", "亮相", "首发", "上市开售",
+        # 注意：不含裸词 "launched" / "released"（会误匹配 "not yet launched"）
+        # 不含 "specs confirmed" / "规格确认"（规格泄露，非发布行为）
+        # 不含 "发布" / "推出" 单独使用（易在传言语境中出现）
     ]
 
     # T3 High 必须排除的传言/泄露关键词
@@ -246,6 +267,8 @@ class TopicClassifier:
         "mate", "nova", "pura", "honor magic",
         "razr", "zenbook", "rog phone",
         "macbook", "surface",
+        "oneplus", "realme", "motorola", "nothing phone",
+        "xiaomi", "huawei", "oppo", "vivo",  # 中文品牌英文名
         # 产品类型（中文）
         "手机", "智能手机", "折叠屏手机", "折叠屏", "平板", "笔记本", "电视",
         "冰箱", "洗衣机", "空调", "净化器", "扫地机器人", "智能手表", "耳机"
@@ -284,7 +307,10 @@ class TopicClassifier:
         r"|ROG\s+\S+"                        # ROG Phone 9
         r"|ZenBook\s+\S+"                    # ZenBook A16
         r"|MagicPad\s+\S+"                   # MagicPad 3 Pro
+        r"|Xiaomi\s+\d+\w*"                  # Xiaomi 15 Pro
         r"|小米\s*\d+\w*"                    # 小米15 Pro
+        r"|\b(Ace|Note|Edge|Flip|Civi|K\d+)\s+\d+\w*"  # OnePlus Ace 6 / Redmi K90
+        r"|\b\w+\s+\d+\s*(Pro|Ultra|Plus|Max|SE|Lite|Mini|Master)\b"  # Any Brand N Pro/Ultra
         r"|麒麟\s*\d+\w*"                   # 麒麟9030S
         r"|天玑\s*\d+\w*"                   # 天玑9400
         r")",
@@ -554,8 +580,9 @@ class TopicClassifier:
         "电子制造", "手机制造", "家电制造", "电子工厂"
     ]
 
-    # 跨栏目去重优先级 (T1 最高)
-    TOPIC_PRIORITY = {1: 4, 2: 3, 3: 2, 4: 1}
+    # 跨栏目去重优先级：T3 > T4 > T2 > T1
+    # 当同一新闻同时符合多个栏目时，归入优先级最高的栏目
+    TOPIC_PRIORITY = {3: 4, 4: 3, 2: 2, 1: 1}
 
     def __init__(self, topics_config: Dict = None):
         self.config = topics_config or {}
@@ -776,6 +803,8 @@ class TopicClassifier:
 
         is_rumor = any(kw.lower() in text for kw in self.RUMOR_KEYWORDS)
         has_model = self._has_product_model(title + " " + text)
+        # High 需要专属的"发布行为词"（不能只是"规格确认/specs confirmed"）
+        has_launch_action = any(kw.lower() in text for kw in self.LAUNCH_ACTION_KEYWORDS)
 
         # Gate 3: 三星过滤（全局规则）
         # 三星为主角 → 仅允许评测（Med）；其余全部排除
@@ -784,14 +813,15 @@ class TopicClassifier:
             return False, ""   # 三星发布/定价/功能 → 排除；三星评测 → 保留(Med)
 
         # 优先级判断（严格顺序）
-        if has_launch and has_model and not is_rumor:
-            return True, "high"   # 真实发布 + 明确型号 + 非传言
+        # High = 明确型号 + 非传言 + 明确发布行为词（三条缺一不可）
+        if has_launch_action and has_model and not is_rumor:
+            return True, "high"
         if has_review and not is_rumor:
             return True, "med"    # 真实评测（含三星产品评测）
         if has_pricing:
             return True, "low"    # 价格新闻
         if has_launch or has_review:
-            return True, "low"    # 有发布信号但有传言/无型号 → low
+            return True, "low"    # 有发布信号但：有传言 / 无型号 / 无发布行为词 → low
         return False, ""
 
     def _check_t4(self, text: str) -> Tuple[bool, str]:
