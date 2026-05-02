@@ -26,6 +26,7 @@ from summarizer import ArticleSummarizer
 from reporter import ReportGenerator
 from mailer import EmailSender
 from google_news_fetcher import GoogleNewsFetcher, TOPIC_SEARCH_KEYWORDS
+from agent_screener import AgentScreener
 
 
 class SamsungIntelligenceSystem:
@@ -56,6 +57,7 @@ class SamsungIntelligenceSystem:
         self.reporter   = ReportGenerator(self.config)
         self.mailer     = EmailSender(self.config.get("email", {}))
         self.google_fetcher = GoogleNewsFetcher(self.fetcher.session)
+        self.screener   = AgentScreener(api_key=os.getenv("DEEPSEEK_API_KEY"))
 
     def _load_config(self, config_path: str) -> Dict:
         full_path = self.base_dir / config_path
@@ -253,7 +255,11 @@ class SamsungIntelligenceSystem:
                     if 1 <= tid <= 4:
                         articles_by_topic[tid].append(article)
 
-            # Step 8.5 removed: T4 is now New Technology/Materials (no structural validation needed)
+            # ── Step 8.5: DeepSeek Agent 二次筛查（逐 Topic 语义验证）────────
+            print("\n🤖 Step 8.5: DeepSeek Agent screening (per-topic validation)...")
+            articles_by_topic = self.screener.screen_all(articles_by_topic)
+            agent_removed = self.screener.stats.get("removed", 0)
+            deletion_log["agent_screened"] = deletion_log.get("agent_screened", 0) + agent_removed
 
             # ── Step 9: AI 摘要 ──────────────────────────────────────────
             print("\n✍️ Step 9: Generating AI summaries...")
